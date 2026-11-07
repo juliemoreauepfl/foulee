@@ -167,3 +167,97 @@ def test_graphe_course_jour_j(app):
     passer(page="semaine")
     texte = " ".join(str(a) for _, args in st.journal for a in args)
     assert "jusqu&#x27;au jour J" in texte or "jusqu'au jour J" in texte
+
+
+def test_deplacer_depuis_semaine(app):
+    st, passer = app
+    passer(["lien_demo"])
+    passer(["accent_objectif"])
+    passer(["accent_creer"])
+    passer(page="semaine", decal_semaine=1)
+    ctx = st.session_state.contexte
+    sem = ctx.plan.semaines[next(i for i, x in enumerate(ctx.plan.semaines) if x.debut > ctx.aujourd_hui)]
+    longue = next(x for x in sem.seances if x.genre == "long")
+    cle = (longue.origine or longue.ident).replace("-", "_")
+    from foulee.engine.seances import JOURS
+    lundi = sem.debut
+    passer([f"petit_dep_ok_{cle}"], **{f"dep_{cle}_{longue.jour.isoformat()}": f"{JOURS[0][:3]}. {lundi.day}"})
+    assert st.session_state.etat["deplacements"][longue.origine] == lundi.isoformat()
+    ctx = st.session_state.contexte
+    assert any(x.genre == "long" and x.jour == lundi for x in ctx.plan.seances())
+
+
+def _demarrer(passer):
+    passer(["lien_demo"])
+    passer(["accent_objectif"])
+    passer(["accent_creer"])
+
+
+def test_annuler_seance_du_jour(app):
+    st, passer = app
+    _demarrer(passer)
+    from datetime import timedelta
+    from foulee import coach
+    ctx = st.session_state.contexte
+    # on se place sur une séance de la semaine prochaine, pas encore faite
+    sem = next(x for x in ctx.plan.semaines if x.debut > ctx.aujourd_hui)
+    cible = next(x for x in sem.seances if x.genre in ("seuil", "vma", "cotes", "fartlek", "specifique", "long"))
+    e = st.session_state.etat
+    from foulee.engine import ajustement as AJ
+    msg = AJ.annuler(e, ctx.plan, cible, cible.jour, "Fatigue")
+    assert "annulée" in msg
+    ctx2 = coach.construire(e, st.session_state.donnees, cible.jour)
+    sem2 = ctx2.plan.semaine_de(cible.jour)
+    assert not any(x.jour == cible.jour and x.genre == cible.genre for x in sem2.seances)
+    a = e["annulations"][cible.origine]
+    if a["remplace"]:   # reportée à la place d'un footing
+        assert any(x.reportee and x.genre == cible.genre for x in sem2.seances)
+        assert not any((x.origine or x.ident) == a["remplace"] for x in sem2.seances)
+    AJ.retablir(e, cible.origine)
+    ctx3 = coach.construire(e, st.session_state.donnees, cible.jour)
+    assert any(x.jour == cible.jour and x.genre == cible.genre for x in ctx3.plan.seances())
+
+
+def test_annuler_depuis_aujourdhui_et_fete(app):
+    st, passer = app
+    _demarrer(passer)
+    ctx = st.session_state.contexte
+    passer(page="aujourdhui")
+    t = textes(st)
+    assert "Cette semaine" in t
+    seances = [s for s in ctx.seances_du_jour() if s.ident not in ctx.liens]
+    if seances:
+        s = seances[0]
+        cle = (s.origine or s.ident).replace("-", "_")
+        passer([f"petit_annul_{cle}"], **{f"raison_{cle}": "Malade"})
+        assert s.origine in st.session_state.etat["annulations"]
+        assert "Finalement je la fais" in textes(st)
+        passer([f"lien_retablir_{s.origine.replace('-', '_')}"])
+        assert s.origine not in st.session_state.etat["annulations"]
+    # Objectif de la semaine : fête affichée une seule fois
+    ctx = st.session_state.contexte
+    faits, prevus = ctx.km_semaine()
+    assert prevus > 0
+    st.session_state.etat["fetes"] = []
+    import foulee.coach as C
+    orig = C.Contexte.km_semaine
+    C.Contexte.km_semaine = lambda self, sem=None: (40.0, 30.0)
+    try:
+        passer(page="semaine")
+        assert "Objectif de la semaine atteint" in textes(st)
+        passer(page="semaine")
+        assert "Objectif de la semaine atteint" not in textes(st)
+    finally:
+        C.Contexte.km_semaine = orig
+
+
+def test_sortie_fc(app):
+    st, passer = app
+    _demarrer(passer)
+    ctx = st.session_state.contexte
+    s, act = next((s, a) for s, a in ((s, ctx.liens.get(s.ident)) for s in ctx.plan.seances()) if a)
+    passer(page="sortie", sortie_act=act, sortie_seance=s.ident)
+    t = textes(st)
+    assert "Ton cœur pendant la sortie" in t and "Z2 Endurance" in t
+    passer(page="forme")
+    assert st.session_state.page == "forme"

@@ -74,6 +74,15 @@ def afficher():
                           f'<span style="font-weight:600">{droite}</span></div>{ex}</li>')
         html(f'<div class="f-carte"><h2 class="f-titre" style="font-size:20px">Dernières sorties</h2>'
              f'<ol class="f-etapes" style="gap:12px">{"".join(lignes)}</ol></div>')
+        import streamlit as st
+        recents = acts.sort_values("debut").tail(10).iloc[::-1].to_dict("records")
+        noms = {f"{fmt_date(r['date'])} · {r['nom']} · {fmt_km(r['distance_km'])}": r for r in recents}
+        choix = st.selectbox("Analyser ma FC sur une sortie", list(noms), index=None, placeholder="Choisis une sortie")
+        if choix:
+            r = noms[choix]
+            seance = next((s for s in ctx.plan.seances() if ctx.liens.get(s.ident) is not None
+                           and str(ctx.liens[s.ident]["id"]) == str(r["id"])), None)
+            E.aller("sortie", sortie_act=r, sortie_seance=seance.ident if seance else None)
 
 
 def _ma_montre(ctx):

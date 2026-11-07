@@ -226,6 +226,80 @@ def barres_sommeil(jours, heures, accent=ACCENT) -> str:
     return f'<div style="display:grid;grid-template-columns:repeat({len(cols)},minmax(0,1fr));gap:8px">{"".join(cols)}</div>'
 
 
+COULEURS_ZONES = ["#D9D2C7", "#9DB0F0", "#7CC59A", "#FFB37A", "#FF6B6B"]
+
+
+def courbe_fc(points, b, w=340, h=150) -> str:
+    """Courbe de FC sur fond de zones. points : [(t s, fc)], b : bornes Z1..Z5 + FC max."""
+    if len(points) < 2:
+        return ""
+    fcs = [f for _, f in points]
+    lo = min(min(fcs), b[0]) - 5
+    hi = max(max(fcs), b[4]) + 5
+    t_max = points[-1][0] or 1
+    g = 30
+    sx = lambda t: g + t / t_max * (w - g - 4)
+    sy = lambda f: h - 18 - (f - lo) / (hi - lo) * (h - 26)
+    bandes = []
+    limites = [lo] + list(b[1:5]) + [hi]
+    for k in range(5):
+        y1, y2 = sy(min(limites[k + 1], hi)), sy(max(limites[k], lo))
+        if y2 > y1:
+            bandes.append(f'<rect x="{g}" y="{y1:.1f}" width="{w - g - 4}" height="{y2 - y1:.1f}" fill="{COULEURS_ZONES[k]}" opacity=".35"/>'
+                          f'<text x="{g - 4}" y="{(y1 + y2) / 2 + 4:.1f}" text-anchor="end" font-size="10" fill="{GRIS}">Z{k + 1}</text>')
+    chemin = _chemin([(sx(t), sy(f)) for t, f in points])
+    graduations = "".join(
+        f'<text x="{sx(m * 60):.1f}" y="{h - 3}" text-anchor="middle" font-size="10" fill="{GRIS}">{m}\u2032</text>'
+        for m in range(0, int(t_max // 60) + 1, max(10, int(t_max // 60 // 5) // 10 * 10 or 10)))
+    return (f'<svg viewBox="0 0 {w} {h}" width="100%" role="img" aria-label="Fréquence cardiaque pendant la sortie">'
+            f'{"".join(bandes)}<path d="{chemin}" fill="none" stroke="{ENCRE}" stroke-width="2" stroke-linejoin="round"/>'
+            f'{graduations}</svg>')
+
+
+def barre_zones(pct) -> str:
+    morceaux = "".join(f'<div style="width:{p}%;background:{c}" title="Z{k + 1} {p} %"></div>'
+                       for k, (p, c) in enumerate(zip(pct, COULEURS_ZONES)) if p > 0)
+    return f'<div style="display:flex;height:14px;border-radius:999px;overflow:hidden;gap:2px">{morceaux}</div>'
+
+
+def fete(titre: str, sous: str, accent: str = ACCENT) -> str:
+    """Petite fête plein écran : confettis + coureur qui saute, disparaît toute seule (CSS pur)."""
+    import random as _r
+    rng = _r.Random(titre)
+    couleurs = [accent, BLEU, "#7CC59A", "#FFD23F", "#FF6B6B", ENCRE]
+    confettis = "".join(
+        f'<i style="left:{rng.uniform(0, 100):.0f}%;background:{rng.choice(couleurs)};'
+        f'animation-delay:{rng.uniform(0, 1.2):.2f}s;animation-duration:{rng.uniform(2.2, 3.6):.2f}s;'
+        f'width:{rng.choice([6, 8, 10])}px;height:{rng.choice([10, 14, 6])}px;transform:rotate({rng.randint(0, 90)}deg)"></i>'
+        for _ in range(70))
+    coureur = (f'<svg class="f-fete-coureur" width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">'
+               f'<circle cx="60" cy="60" r="56" fill="{accent}"/>'
+               f'<circle cx="68" cy="30" r="9" fill="{ENCRE}"/>'
+               f'<path d="M64 42 L54 66 L70 76 L62 98 M54 66 L40 84 M60 50 L80 58 L88 48 M60 50 L42 46 L34 56" '
+               f'stroke="{ENCRE}" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+               f'<path d="M20 20 l4 8 l8 4 l-8 4 l-4 8 l-4 -8 l-8 -4 l8 -4z" fill="{BLANC}"/>'
+               f'<path d="M98 82 l3 6 l6 3 l-6 3 l-3 6 l-3 -6 l-6 -3 l6 -3z" fill="{BLANC}"/></svg>')
+    return f"""<style>
+.f-fete {{ position: fixed; inset: 0; z-index: 99999; pointer-events: none; overflow: hidden;
+  animation: f-fete-fin 5.2s ease forwards; }}
+.f-fete i {{ position: absolute; top: -20px; border-radius: 2px; animation-name: f-tombe; animation-timing-function: linear;
+  animation-iteration-count: 1; animation-fill-mode: forwards; }}
+.f-fete-carte {{ position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); text-align: center;
+  background: {BLANC}; border-radius: 32px; padding: 22px 26px; box-shadow: 0 20px 60px rgba(0,0,0,.18);
+  width: min(320px, 82vw); animation: f-pop .6s cubic-bezier(.2,1.6,.4,1) both; }}
+.f-fete-coureur {{ animation: f-saut .5s ease-in-out .5s 6 alternate; }}
+@keyframes f-tombe {{ to {{ top: 105vh; transform: rotate(720deg) translateX(40px); }} }}
+@keyframes f-pop {{ from {{ transform: translate(-50%, -50%) scale(.3); opacity: 0; }} }}
+@keyframes f-saut {{ to {{ transform: translateY(-16px) rotate(-6deg); }} }}
+@keyframes f-fete-fin {{ 0%, 85% {{ opacity: 1; }} 100% {{ opacity: 0; visibility: hidden; }} }}
+@media (prefers-reduced-motion: reduce) {{ .f-fete i, .f-fete-coureur {{ animation: none; display: none; }} }}
+</style>
+<div class="f-fete" role="status" aria-live="polite">{confettis}
+<div class="f-fete-carte">{coureur}
+<div class="f-titre" style="font-size:26px;margin-top:10px">{esc(titre)}</div>
+<p class="f-sous" style="margin:6px 0 0;font-size:14px;line-height:1.4">{esc(sous)}</p></div></div>"""
+
+
 COULEURS_PHASES = {"base": "#D9D2C7", "dev": "#9DB0F0", "spe": None, "aff": "#7CC59A"}
 
 

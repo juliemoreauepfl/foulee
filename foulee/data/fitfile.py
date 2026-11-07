@@ -256,3 +256,34 @@ def lire_tours(contenu: bytes) -> list[dict]:
         allure = 1_000_000 / vit if vit else (duree / (dist / 1000) if dist else None)
         tours.append({"duree_s": duree, "distance_m": dist, "fc_moy": v.get(15), "allure": allure})
     return tours
+
+
+RECORD = 20
+
+
+def lire_flux(contenu: bytes, pas_s: int = 5) -> list[dict]:
+    """Points enregistrés pendant la sortie (messages « record ») : temps écoulé (s),
+    FC (bpm), vitesse (m/s), distance (m). Un point toutes les `pas_s` secondes."""
+    msgs = lire_messages(extraire_fit(contenu))
+    flux, t0, t_prec, dernier = [], None, None, None
+    for glob, v in msgs:
+        if glob != RECORD:
+            continue
+        ts = v.get(253)
+        if ts is None:
+            ts = (t_prec or 0) + 1
+        t_prec = ts
+        if t0 is None:
+            t0 = ts
+        t = ts - t0
+        if dernier is not None and t - dernier < pas_s:
+            continue
+        vit = v.get(73) if v.get(73) is not None else v.get(6)
+        dist = v.get(5)
+        fc = v.get(3)
+        if fc is None and vit is None:
+            continue
+        flux.append({"t": int(t), "fc": fc, "v": (vit / 1000) if vit is not None else None,
+                     "d": (dist / 100) if dist is not None else None})
+        dernier = t
+    return flux

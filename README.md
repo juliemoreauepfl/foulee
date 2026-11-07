@@ -150,3 +150,15 @@ foulee/ui/              thème, composants et écrans
 assets/exos/            illustrations des exercices
 tests/                  python -m pytest
 ```
+
+## Changer une séance de jour
+
+Onglet **Semaine** → « Changer de jour » sous une séance → choisis le jour → Déplacer. Si une séance du même type est déjà ce jour-là, elles s'échangent. Le bouton en bas remet les jours prévus par le coach.
+
+## Annuler la séance du jour
+
+Aujourd'hui → « Annuler cette séance » → choisis une raison (facultatif). Une séance clé (fractionné, seuil, sortie longue) prend la place d'un footing plus tard dans la semaine si ça ne colle pas deux séances dures ; un footing annulé n'est pas rattrapé. « Malade » ou « Douleur » : pas d'intensité les 3 jours suivants. « Finalement je la fais » annule l'annulation.
+
+## Ta FC pendant les sorties
+
+L'app télécharge le fichier de chaque sortie (Garmin ou Polar), lit ta FC point par point et l'analyse : temps dans chaque zone (Karvonen, à partir de ta FC max et de ta FC repos), dérive cardiaque sur les sorties régulières, footing trop rapide. L'analyse apparaît dans « Comment c'était ? », sous « Voir ma FC pendant la sortie » (Semaine) et dans Forme → « Analyser ma FC sur une sortie ». Le coach en tient compte.

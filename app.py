@@ -9,7 +9,7 @@ st.set_page_config(page_title="Foulée", page_icon=str(Path(__file__).parent / "
 
 from foulee.ui import etat as E  # noqa: E402
 from foulee.ui import theme as T  # noqa: E402
-from foulee.ui.ecrans import (aujourdhui, bienvenue, bilan, forme, objectif, reglages,  # noqa: E402
+from foulee.ui.ecrans import (aujourdhui, bienvenue, bilan, forme, objectif, reglages, sortie,  # noqa: E402
                               renfo, semaine)
 
 st.markdown(T.css(E.accent()), unsafe_allow_html=True)
@@ -76,6 +76,7 @@ ECRANS = {
     "biblio": renfo.bibliotheque,
     "bilan": bilan.afficher,
     "reglages": reglages.afficher,
+    "sortie": sortie.afficher,
 }
 
 if porte_d_entree():

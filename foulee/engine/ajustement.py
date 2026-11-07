@@ -60,11 +60,13 @@ def appliquer_ajustements(plan: Plan, ajustements: dict) -> Plan:
                     m = int(aj.get("minutes", 30))
                     s = Seance(s.jour, "course", "footing", f"Footing · {fmt_duree(m * 60, court=True)}",
                                [Bloc([Etape(CONTINU, duree_s=m * 60, allure_min=lo, allure_max=hi)])],
-                               round(m * 60 / ((lo + hi) / 2), 1), m, aj.get("note", ""), allegee=True)
+                               round(m * 60 / ((lo + hi) / 2), 1), m, aj.get("note", ""), allegee=True,
+                               origine=s.origine)
                 elif aj["type"] == "velo":
                     from .velo import FabriqueVelo
+                    origine = s.origine
                     s = FabriqueVelo(getattr(plan, "ftp", None), getattr(plan, "fc_max", None)).remplacer_footing(s)
-                    s.note = aj.get("note", s.note)
+                    s.note, s.origine = aj.get("note", s.note), origine
                 elif aj["type"] == "raccourcir":
                     f = float(aj.get("facteur", 0.8))
                     for b in s.blocs:
@@ -79,6 +81,144 @@ def appliquer_ajustements(plan: Plan, ajustements: dict) -> Plan:
         sem.seances = nouvelles
         sem.km = round(sum(x.km for x in nouvelles), 1)
     return plan
+
+
+# ------------------------------------------------------------ déplacer une séance
+DURES = QUALITE | {"long", "course", "velo_tempo"}
+
+
+def appliquer_deplacements(plan: Plan, deplacements: dict) -> Plan:
+    """deplacements : {identifiant d'origine : nouvelle date ISO}. Toujours dans la même semaine."""
+    ordre = {"course": 0, "course_cible": 0, "velo": 1, "renfo": 2}
+    for sem in plan.semaines:
+        for s in sem.seances:
+            s.origine = s.origine or s.ident
+            cible = (deplacements or {}).get(s.origine)
+            if cible:
+                j = date.fromisoformat(cible)
+                if sem.debut <= j < sem.debut + timedelta(days=7):
+                    s.jour = j
+        sem.seances.sort(key=lambda x: (x.jour, ordre.get(x.sport, 3)))
+    return plan
+
+
+def _meme_type(a: Seance, b: Seance) -> bool:
+    groupe = lambda x: "velo" if x.sport == "velo" else ("renfo" if x.sport == "renfo" else "course")
+    return groupe(a) == groupe(b)
+
+
+def deplacer(etat: dict, plan: Plan, seance: Seance, cible: date) -> str:  # noqa: C901
+    """Déplace une séance dans sa semaine. Si une séance du même type est déjà prévue ce
+    jour-là, les deux s'échangent. Retourne un avertissement éventuel."""
+    dep = etat.setdefault("deplacements", {})
+    sem = plan.semaine_de(seance.jour)
+    if sem is None or not (sem.debut <= cible < sem.debut + timedelta(days=7)):
+        return "On ne peut déplacer une séance que dans sa semaine."
+    autre = next((x for x in sem.seances if x.jour == cible and x is not seance and _meme_type(x, seance)), None)
+    ancien = seance.jour
+    dep[seance.origine or seance.ident] = cible.isoformat()
+    if autre:
+        dep[autre.origine or autre.ident] = ancien.isoformat()
+    # Garde-fou : deux séances dures qui se suivent ?
+    nouveaux = {id(seance): cible}
+    if autre:
+        nouveaux[id(autre)] = ancien
+    durs = {nouveaux.get(id(x), x.jour) for x in sem.seances if x.genre in DURES}
+    if any((j + timedelta(days=1)) in durs for j in durs):
+        return "Attention : deux séances dures se suivent maintenant. Si tu peux, garde un jour facile entre les deux."
+    return ""
+
+
+# ------------------------------------------------------------ annuler la séance du jour
+RAISONS = ["Fatigue", "Pas le temps", "Malade", "Douleur", "Météo"]
+
+
+def annuler(etat: dict, plan: Plan, seance: Seance, aujourd_hui: date, raison: str = "") -> str:
+    """Annule une séance. Une séance clé (qualité, sortie longue) prend la place d'un footing
+    plus tard dans la semaine si c'est possible sans coller deux séances dures ; un footing
+    annulé n'est pas rattrapé (on ne rattrape jamais du volume). Retourne le message du coach."""
+    ann = etat.setdefault("annulations", {})
+    cle = seance.origine or seance.ident
+    if cle in ann:  # c'était déjà une séance reportée : cette fois, on la laisse tomber
+        ann[cle]["definitif"] = True
+        txt = f"{_nom(seance)} annulée pour de bon cette semaine. On repart sur la suite du plan."
+        _noter(etat, aujourd_hui, txt, f"annul-{cle}-def")
+        return txt
+    sem = plan.semaine_de(seance.jour)
+    remplace = None
+    malade = raison in ("Malade", "Douleur")
+    if sem and seance.sport == "course" and seance.genre in QUALITE | {"long"} and not malade:
+        durs = {x.jour for x in sem.seances if x.genre in DURES and x is not seance}
+        for x in sem.seances:
+            if (x.sport == "course" and x.genre == "footing" and x.jour > aujourd_hui
+                    and x.jour - timedelta(days=1) not in durs and x.jour + timedelta(days=1) not in durs):
+                remplace = x
+                break
+    ann[cle] = {"jour": seance.jour.isoformat(), "raison": raison, "le": aujourd_hui.isoformat(),
+                "remplace": (remplace.origine or remplace.ident) if remplace else None}
+    if remplace:
+        txt = (f"{_nom(seance)} annulée. Je la déplace au {_jour(remplace.jour)} à la place du footing : "
+               "c'est la séance la plus utile de ta semaine.")
+    elif seance.sport == "course" and seance.genre in QUALITE | {"long"} and not malade:
+        txt = (f"{_nom(seance)} annulée. Pas de place pour la caser cette semaine sans enchaîner deux séances dures : "
+               "on la laisse filer, le plan continue normalement.")
+    elif seance.sport == "renfo":
+        txt = "Renfo annulé. Pas grave : le prochain arrive vite."
+    else:
+        txt = f"{_nom(seance)} annulé. On ne rattrape pas : le plan continue normalement."
+    if malade:
+        aj = etat.setdefault("ajustements", {})
+        for s in plan.seances():
+            if aujourd_hui < s.jour <= aujourd_hui + timedelta(days=3) and s.sport == "course" and s.genre in QUALITE | {"long"}:
+                aj[s.jour.isoformat()] = {"type": "footing", "minutes": 30,
+                                          "note": f"Reprise en douceur après « {raison.lower()} » : footing tranquille."}
+        txt += (" Les 3 prochains jours : pas d'intensité, juste du footing tranquille si tu te sens bien."
+                + (" Si la douleur dure, montre-la à un·e kiné." if raison == "Douleur" else
+                   " Si tu as de la fièvre, pas de course du tout."))
+    _noter(etat, aujourd_hui, txt, f"annul-{cle}")
+    return txt
+
+
+def retablir(etat: dict, cle: str) -> None:
+    a = (etat.get("annulations") or {}).pop(cle, None)
+    if a:
+        etat["notes"] = [n for n in etat.get("notes", []) if not n.get("cle", "").startswith(f"annul-{cle}")]
+
+
+def appliquer_annulations(plan: Plan, annulations: dict) -> Plan:
+    if not annulations:
+        return plan
+    ordre = {"course": 0, "course_cible": 0, "velo": 1, "renfo": 2}
+    for sem in plan.semaines:
+        par_origine = {(x.origine or x.ident): x for x in sem.seances}
+        retirer, reportees = set(), set()
+        for cle, a in annulations.items():
+            s = par_origine.get(cle)
+            if s is None:
+                continue
+            r = par_origine.get(a.get("remplace") or "")
+            if r is not None and not a.get("definitif"):
+                s.jour, s.reportee = r.jour, True
+                s.note = f"Reportée ({a.get('raison', '').lower() or 'séance annulée'})." + (" " + s.note if s.note else "")
+                reportees.add(id(s))
+                retirer.add(id(r))
+            else:
+                retirer.add(id(s))
+                if r is not None:
+                    retirer.add(id(r))
+        sem.seances = [x for x in sem.seances if id(x) not in retirer or id(x) in reportees]
+        sem.seances.sort(key=lambda x: (x.jour, ordre.get(x.sport, 3)))
+        sem.km = round(sum(x.km for x in sem.seances), 1)
+    return plan
+
+
+def _nom(s: Seance) -> str:
+    return "Le renfo" if s.sport == "renfo" else s.titre.split("·")[0].strip()
+
+
+def _jour(j: date) -> str:
+    from .seances import JOURS
+    return f"{JOURS[j.weekday()].lower()} {j.day}"
 
 
 def _noter(etat: dict, jour: date, texte: str, cle: str):
@@ -121,6 +261,10 @@ def regles_du_jour(etat: dict, plan: Plan, meteo: Meteo, aujourd_hui: date, lien
     passees = [s for s in plan.seances()
                if s.sport == "course" and aujourd_hui - timedelta(days=14) <= s.jour < aujourd_hui]
     manquees = [s for s in passees if s.ident not in liens]
+    annulees = [a for a in (etat.get("annulations") or {}).values()
+                if aujourd_hui - timedelta(days=14) <= date.fromisoformat(a["le"]) < aujourd_hui]
+    manquees = manquees + annulees
+    passees = passees + annulees
     semaine = aujourd_hui.isocalendar()
     cle = f"manquees-{semaine.year}-{semaine.week}"
     if len(passees) >= 4 and len(manquees) >= 3 and not _regle_deja(etat, cle):
@@ -251,6 +395,18 @@ def traiter_bilan(etat: dict, plan: Plan, bilan: dict, aujourd_hui: date) -> tup
                                            "comme prévu." if ecart in (-1, 0, 1) else "."))
     elif len(lents) >= max(2, len(conf) // 2 + 1):
         phrases.append("Plusieurs blocs plus lents que la cible : rien de grave, ça arrive avec la fatigue ou la chaleur.")
+
+    # 4. Fréquence cardiaque
+    cardio = bilan.get("cardio") or {}
+    alertes = [t for ton, t in cardio.get("messages", []) if ton == "attention"]
+    if alertes and not douleurs:
+        vites = [b for b in hist if b is not bilan and b.get("genre") in ("footing", "long")
+                 and any("Un peu vite" in t for _, t in (b.get("cardio") or {}).get("messages", []))]
+        if any("Un peu vite" in t for t in alertes) and vites:
+            phrases.append("Deuxième footing trop rapide côté cardio : ralentis franchement, quitte à marcher dans les côtes. "
+                           "Des footings trop rapides fatiguent sans faire progresser.")
+        else:
+            phrases.append(alertes[0].split(":")[0] + " côté cardio : détail dans l'analyse de la sortie.")
 
     if not phrases:
         prochaine = next(iter(a_venir), None)

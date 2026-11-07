@@ -9,7 +9,8 @@ import streamlit as st
 from ...engine.seances import fmt_date, fmt_duree, fmt_km
 from .. import etat as E
 from .. import theme as T
-from ..commun import bouton_fit, boutons_velo, carte_seance, mesures_du_jour, entete, html, jour_txt, nav, note_coach, tag_seance, tuiles
+from ...engine import ajustement as AJ
+from ..commun import feter_si_besoin, jauge_km, bouton_fit, boutons_velo, carte_seance, mesures_du_jour, entete, html, jour_txt, nav, note_coach, tag_seance, tuiles
 
 ACCROCHES = {
     "soleil": "Ton corps dit :<br>on y va.",
@@ -30,6 +31,7 @@ def afficher():
     html(f'<div><p class="f-sous" style="margin:0;font-size:15px">Salut{" " + T.esc(prenom) if prenom else ""},</p>'
          f'<h1 class="f-titre" style="font-size:34px;margin:2px 0 0">{ACCROCHES.get(ctx.meteo.etat, ACCROCHES["inconnu"])}</h1></div>')
     nav("aujourdhui")
+    feter_si_besoin(ctx)
 
     if e.get("mode") == "demo":
         html('<div class="f-bleu">Mode démo : données inventées. Branche ta clé Garmin dans les Réglages quand tu veux.</div>')
@@ -67,6 +69,7 @@ def afficher():
         carte_seance(s, "Séance du jour" if s.sport != "velo" else "Vélo du jour", fait)
         if not fait:
             (boutons_velo if s.sport == "velo" else bouton_fit)(s, s.ident)
+            _annuler(ctx, s)
     for s in renfos:
         faite = auj.isoformat() in e.get("renfo_faits", {})
         html(f'''<div class="f-carte"><div class="f-ligne"><span>{tag_seance(s)}</span>
@@ -75,12 +78,20 @@ def afficher():
           <div class="f-sous" style="margin-top:2px">{"Faite, bravo !" if faite else "5 exercices, tu choisis ton matériel."}</div></div>''')
         if not faite and st.button("Ouvrir la séance de renfo", key="renfo_jour", type="primary"):
             E.aller("renfo", renfo_jour=auj)
+        if not faite:
+            _annuler(ctx, s)
+    _annulees(ctx)
     if not seances:
         prochaine = next((s for s in ctx.plan.seances() if s.jour > auj), None)
         suite = f"Prochaine : {jour_txt(prochaine.jour, auj).lower()}, {prochaine.titre.lower()}." if prochaine else ""
         html(f'<div class="f-carte"><div class="f-titre" style="font-size:25px">Repos</div>'
              f'<p class="f-sous" style="margin:6px 0 0;line-height:1.4">Les muscles se construisent pendant la récup. '
              f'Marche, étire-toi, dors bien. {T.esc(suite)}</p></div>')
+
+    # Kilomètres de la semaine
+    faits, prevus = ctx.km_semaine()
+    if prevus:
+        html(f'<div class="f-carte"><div class="f-sous" style="margin-bottom:2px">Cette semaine</div>{jauge_km(faits, prevus)}</div>')
 
     # Tuiles
     som = ctx.donnees.sommeil
@@ -94,7 +105,42 @@ def afficher():
     if fc == "–" and q is not None and not q.empty and "fc_repos" in q and q["fc_repos"].notna().any():
         fc = f'{int(q["fc_repos"].dropna().iloc[-1])} bpm'
     tuiles([("Sommeil", h, T.ENCRE), ("FC repos", fc, T.ENCRE),
-            ("Fraîcheur", f"{tsb:+.0f}", T.BLEU if tsb >= 0 else T.ORANGE_TEXTE)])
+            ("Fraîcheur", "–" if pd.isna(tsb) else f"{round(tsb) or 0:+d}".replace("+0", "0"), T.BLEU if tsb >= 0 else T.ORANGE_TEXTE)])
     bonus = mesures_du_jour(q, auj, ["bb_max", "stress", "pas", "recharge_ans", "spo2"])[:3]
     if len(bonus) >= 2:
         tuiles(bonus)
+
+
+def _annuler(ctx, s):
+    """Annuler la séance du jour : le coach remet la semaine d'aplomb."""
+    cle = (s.origine or s.ident).replace("-", "_")
+    with st.popover("Annuler cette séance", icon=":material/event_busy:"):
+        raison = st.pills("Pourquoi ?", AJ.RAISONS, key=f"raison_{cle}")
+        st.caption("Une séance clé est replacée sur un footing plus tard dans la semaine si c'est possible. "
+                   "Un footing annulé n'est pas rattrapé.")
+        if st.button("Annuler la séance", key=f"petit_annul_{cle}", type="primary"):
+            msg = AJ.annuler(E.etat(), ctx.plan, s, ctx.aujourd_hui, raison or "")
+            E.sauver()
+            E.invalider()
+            st.toast(msg[:120])
+            st.rerun()
+
+
+def _annulees(ctx):
+    """Séances annulées aujourd'hui, avec possibilité de revenir en arrière."""
+    e = E.etat()
+    auj = ctx.aujourd_hui.isoformat()
+    for cle, a in list((e.get("annulations") or {}).items()):
+        if a.get("le") != auj:
+            continue
+        nom = "Renfo" if cle.endswith("renfo") else cle.split("-", 3)[-1].replace("_", " ").capitalize()
+        raison = f" · {a['raison'].lower()}" if a.get("raison") else ""
+        html(f'<div class="f-carte" style="background:{T.CREME_FONCE}"><div class="f-ligne"><div>'
+             f'<div class="f-sous">Annulée aujourd\'hui{T.esc(raison)}</div>'
+             f'<div class="f-titre" style="font-size:20px;margin-top:2px;text-decoration:line-through">{T.esc(nom)}</div></div>'
+             f'<span class="f-sous">{"reportée" if a.get("remplace") and not a.get("definitif") else ""}</span></div></div>')
+        if st.button("Finalement je la fais", key=f"lien_retablir_{cle.replace('-', '_')}"):
+            AJ.retablir(e, cle)
+            E.sauver()
+            E.invalider()
+            st.rerun()

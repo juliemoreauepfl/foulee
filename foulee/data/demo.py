@@ -132,3 +132,34 @@ def tours_simules(seance: Seance, graine: str) -> list[dict]:
                     dist = duree / allure * 1000
                 tours.append({"duree_s": duree, "distance_m": dist, "fc_moy": 150, "allure": allure})
     return tours
+
+
+def flux_simule(seance, act: dict, fc_repos: float = 52, fc_max: float = 190) -> list[dict]:
+    """Courbe de FC plausible qui suit les étapes de la séance (mode démo)."""
+    from ..engine.seances import ECHAUFFEMENT, RECUP, RETOUR
+    rng = random.Random(str(act.get("id")))
+    r = fc_max - fc_repos
+    etapes = []
+    if seance is not None and seance.blocs:
+        for b in seance.blocs:
+            for _ in range(b.repetitions):
+                for e in b.etapes:
+                    allure = ((e.allure_min or 0) + (e.allure_max or 0)) / 2 or 360
+                    duree = e.duree_s or (e.distance_m / 1000 * allure if e.distance_m else 60)
+                    cible = {ECHAUFFEMENT: 0.62, RETOUR: 0.6, RECUP: 0.66}.get(e.type, 0.86 if e.type == EFFORT else 0.66)
+                    etapes.append((duree, cible, 1000 / allure))
+    else:
+        etapes.append((act.get("duree_s", 2400), 0.66, act["distance_km"] * 1000 / max(act.get("duree_s", 1), 1)))
+    total = sum(d for d, _, _ in etapes) or 1
+    echelle = act.get("duree_s", total) / total
+    flux, t, fc, d = [], 0, fc_repos + 0.3 * r, 0.0
+    derive = rng.uniform(0.0, 0.07)
+    for duree, cible, v in etapes:
+        fin = t + duree * echelle
+        while t < fin:
+            but = fc_repos + cible * r * (1 + derive * t / max(act.get("duree_s", 1), 1))
+            fc += (but - fc) * 0.12 + rng.uniform(-1.2, 1.2)
+            d += v * 5
+            flux.append({"t": int(t), "fc": round(fc), "v": round(v * rng.uniform(0.97, 1.03), 2), "d": round(d)})
+            t += 5
+    return flux

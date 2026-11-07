@@ -123,6 +123,17 @@ def donnees_demo(aujourd_hui: date) -> Donnees:
     return Donnees(a, v, s, "demo", aujourd_hui.isoformat(), demo.quotidien(aujourd_hui))
 
 
+def ajouter_manuelles(d: Donnees, etat: dict) -> Donnees:
+    """Ajoute les sorties saisies à la main ou importées en fichiers."""
+    man = etat.get("sorties_manuelles") or []
+    if not man:
+        return d
+    df = pd.DataFrame(man)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    acts = pd.concat([d.activites, df], ignore_index=True) if not d.activites.empty else df
+    return Donnees(acts.drop_duplicates("id", keep="last"), d.vfc, d.sommeil, d.source, d.maj, d.quotidien)
+
+
 def courses(df: pd.DataFrame) -> pd.DataFrame:
     """Seulement la course à pied (pour le niveau, le volume, la plus longue sortie)."""
     if df is None or df.empty or "sport" not in df:

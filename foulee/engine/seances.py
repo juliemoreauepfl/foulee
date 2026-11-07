@@ -51,6 +51,8 @@ class Seance:
     minutes: int = 0
     note: str = ""
     allegee: bool = False     # modifiée par le coach
+    origine: str = ""         # identifiant à la création du plan (pour les déplacements)
+    reportee: bool = False    # replacée sur un autre jour après une annulation
 
     @property
     def ident(self) -> str:

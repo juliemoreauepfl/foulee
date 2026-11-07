@@ -180,3 +180,27 @@ def bouton_fit(s: Seance, cle: str):
             "**Depuis ton téléphone :** dans l'app Garmin Connect › Entraînement › Entraînements › "
             "Créer, recopie les étapes ci-dessus (durées et allures), puis *Envoyer sur l'appareil*.\n\n"
             "Garmin ne permet pas encore aux apps perso d'envoyer une séance directement sur la montre.")
+
+
+def feter_si_besoin(ctx) -> None:
+    """Petite animation quand un objectif tombe (une seule fois par objectif)."""
+    e = E.etat()
+    f = ctx.fete_a_faire(e)
+    if not f:
+        return
+    cle, titre_f, sous = f
+    st.markdown(T.fete(titre_f, sous, E.accent()), unsafe_allow_html=True)
+    e.setdefault("fetes", []).append(cle)
+    E.sauver()
+
+
+def jauge_km(faits: float, prevus: float, sombre: bool = False) -> str:
+    pct = min(100, round(100 * faits / prevus)) if prevus else 0
+    reste = max(0.0, prevus - faits)
+    sous = "Objectif atteint, bravo !" if prevus and reste < 0.05 else (f"encore {reste:.1f} km".replace(".", ",") if prevus else "")
+    fond = "#3A3A42" if sombre else T.CREME_FONCE
+    return (f'<div class="f-ligne"><span class="f-titre" style="font-size:28px">{faits:.1f}'.replace(".", ",") +
+            f'<span style="font-size:15px;font-weight:500;color:{"#CFCBC4" if sombre else T.GRIS}"> / {prevus:.0f} km</span></span>'
+            f'<span class="f-sous">{T.esc(sous)}</span></div>'
+            f'<div class="f-barre" style="margin-top:8px;background:{fond}" role="img" aria-label="{faits:.0f} km courus sur {prevus:.0f} prévus">'
+            f'<div style="width:{pct}%"></div></div>')

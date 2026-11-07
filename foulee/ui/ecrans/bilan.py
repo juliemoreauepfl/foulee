@@ -7,6 +7,7 @@ from ...data import demo
 from ...data.fitfile import lire_tours
 from ...engine import ajustement as AJ
 from ...engine.seances import fmt_date, fmt_duree, fmt_km
+from .. import cardio as CAR
 from .. import etat as E
 from .. import theme as T
 from ..commun import entete, extras_html, html, titre
@@ -73,6 +74,10 @@ def afficher():
       {extras_html(act.get("extras"), sombre=True)}
       {"<ol class='f-etapes'>" + lignes + "</ol>" if lignes else ""}</div>''')
 
+    an = CAR.analyse(act, seance)
+    if an is not None:
+        CAR.carte(an)
+
     libelles = [lib for _, lib in AJ.RESSENTIS]
     ressenti = st.segmented_control("Ton ressenti", libelles, key="bilan_ressenti")
     if ressenti:
@@ -86,7 +91,7 @@ def afficher():
         bilan = {"cle": str(act["id"]), "jour": act["date"].isoformat() if hasattr(act["date"], "isoformat") else str(act["date"]),
                  "type": "course", "genre": seance.genre if seance else "footing", "ressenti": cle_r,
                  "douleurs": list(douleurs or []), "mot": mot, "conformite": conf,
-                 "velo_possible": bool(ctx.profil.velo_semaine)}
+                 "velo_possible": bool(ctx.profil.velo_semaine), "cardio": an.resume() if an else None}
         rep = AJ.traiter_bilan(e, ctx.plan, bilan, ctx.aujourd_hui)
         E.sauver()
         E.invalider()

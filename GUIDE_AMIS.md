@@ -85,3 +85,4 @@ Update branch**. Ton app se met à jour toute seule, et tes données ne bougent 
   dans ta base Supabase, protégée par ta clé secrète, et l'app demande ton mot de passe.
 - **Envoyer une séance sur la montre ?** Bouton « Télécharger pour la montre », puis copie
   du fichier dans `GARMIN/NewFiles` (montre en USB), ou recopie des étapes dans Garmin Connect.
+

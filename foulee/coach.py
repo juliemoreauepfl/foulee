@@ -115,6 +115,38 @@ class Contexte:
     def semaine(self):
         return self.plan.semaine_de(self.aujourd_hui)
 
+    def km_semaine(self, sem=None) -> tuple[float, float]:
+        """(km courus, km prévus) sur la semaine : toutes tes sorties course comptent,
+        même celles qui ne correspondent à aucune séance du plan."""
+        sem = sem or self.semaine()
+        if sem is None:
+            return 0.0, 0.0
+        prevus = sum(s.km for s in sem.seances if s.sport in ("course", "course_cible"))
+        a = self.activites
+        faits = 0.0
+        if a is not None and not a.empty:
+            fin = sem.debut + timedelta(days=7)
+            sport = a["sport"].fillna("course") if "sport" in a else "course"
+            m = (a["date"] >= sem.debut) & (a["date"] < fin) & (sport == "course")
+            faits = float(a.loc[m, "distance_km"].sum())
+        return round(faits, 1), round(prevus, 1)
+
+    def fete_a_faire(self, etat: dict):
+        """Objectif atteint et pas encore fêté ? -> (clé, titre, sous-titre) ou None."""
+        fetes = etat.get("fetes", [])
+        for s in self.plan.seances():
+            if s.sport == "course_cible" and s.ident in self.liens and "jour-j" not in fetes:
+                act = self.liens[s.ident]
+                from .engine.seances import fmt_duree
+                return "jour-j", "Course bouclée !", f"{act['distance_km']:.1f} km en {fmt_duree(act['duree_s'])}. Tu l'as fait."
+        sem = self.semaine()
+        faits, prevus = self.km_semaine(sem)
+        if sem and prevus > 0 and faits >= prevus - 0.05:
+            cle = f"sem-{sem.debut.isoformat()}"
+            if cle not in fetes:
+                return cle, "Objectif de la semaine atteint !", f"{faits:.0f} km sur {prevus:.0f} prévus. Les jambes disent merci."
+        return None
+
 
 def construire(etat: dict, d: Donnees, aujourd_hui: date) -> Contexte:
     profil = profil_depuis(etat)
@@ -141,6 +173,8 @@ def construire(etat: dict, d: Donnees, aujourd_hui: date) -> Contexte:
             avant = activites[activites["date"] < debut] if not activites.empty else activites
             activites = pd.concat([avant, suivi], ignore_index=True)
 
+    AJ.appliquer_deplacements(plan, etat.get("deplacements", {}))
+    AJ.appliquer_annulations(plan, etat.get("annulations", {}))
     AJ.appliquer_ajustements(plan, etat.get("ajustements", {}))
     seances_plan = plan.seances()
     a_apparier = activites[activites["date"] >= debut] if not activites.empty else activites
@@ -151,6 +185,8 @@ def construire(etat: dict, d: Donnees, aujourd_hui: date) -> Contexte:
         plan = generer_plan(profil, debut, vd, port.volume_hebdo, port.plus_longue,
                             facteur_allure=etat["facteurs"].get("allure", 1.0),
                             facteur_volume=etat["facteurs"].get("volume", 1.0))
+        AJ.appliquer_deplacements(plan, etat.get("deplacements", {}))
+        AJ.appliquer_annulations(plan, etat.get("annulations", {}))
         AJ.appliquer_ajustements(plan, etat.get("ajustements", {}))
         liens, libres = AJ.apparier(plan.seances(), a_apparier)
 
@@ -168,5 +204,6 @@ def demarrer_plan(etat: dict, d: Donnees, aujourd_hui: date) -> None:
     etat["plan_debut"] = (aujourd_hui - timedelta(days=10) if d.source == "demo" else aujourd_hui).isoformat()
     etat["facteurs"] = {"allure": 1.0, "volume": 1.0}
     etat["ajustements"] = {}
+    etat["deplacements"] = {}
     etat["regles"] = []
     etat["onboarde"] = True

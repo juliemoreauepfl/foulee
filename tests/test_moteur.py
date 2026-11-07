@@ -177,3 +177,29 @@ def test_une_sortie_et_age():
     senior = generer_plan(Profil("semi", AUJ + timedelta(weeks=16), None, 4, 0, age=55), AUJ, 44, 30, 15)
     assert [s.km for s in jeune.semaines] != [s.km for s in senior.semaines]
     assert coach.fc_max_profil(None, 40) == pytest.approx(180)
+
+
+def test_deplacer_et_echanger():
+    d = donnees_demo(AUJ)
+    etat = coach.etat_initial()
+    etat["profil"].update(distance="semi", date_course=(AUJ + timedelta(weeks=12)).isoformat(),
+                          courses_semaine=4, renfo_semaine=1)
+    coach.demarrer_plan(etat, d, AUJ)
+    etat["plan_debut"] = AUJ.isoformat()
+    ctx = coach.construire(etat, d, AUJ)
+    sem = ctx.plan.semaines[2]
+    longue = next(s for s in sem.seances if s.genre == "long")
+    autre = next(s for s in sem.seances if s.sport == "course" and s.genre == "footing")
+    jour_autre = autre.jour
+    AJ.deplacer(etat, ctx.plan, longue, jour_autre)            # échange longue <-> footing
+    ctx2 = coach.construire(etat, d, AUJ)
+    sem2 = ctx2.plan.semaines[2]
+    assert next(s for s in sem2.seances if s.genre == "long").jour == jour_autre
+    assert any(s.genre == "footing" and s.jour == longue.jour for s in sem2.seances)
+    # Re-déplacer une séance déjà déplacée
+    l2 = next(s for s in sem2.seances if s.genre == "long")
+    AJ.deplacer(etat, ctx2.plan, l2, sem2.debut)                # au lundi
+    ctx3 = coach.construire(etat, d, AUJ)
+    assert next(s for s in ctx3.plan.semaines[2].seances if s.genre == "long").jour == sem2.debut
+    # Hors de la semaine : refusé
+    assert "semaine" in AJ.deplacer(etat, ctx3.plan, l2, sem2.debut + timedelta(days=9))

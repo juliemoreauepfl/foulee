@@ -92,6 +92,10 @@ def creer():
     def pills(label, options, selection_mode="single", default=None, key=None, **k):
         return _widget(key, default if default is not None else ([] if selection_mode == "multi" else None))
 
+    def selectbox(label, options, index=0, key=None, **k):
+        options = list(options)
+        return _widget(key, options[index] if index is not None and options else None)
+
     def text_input(label, value="", key=None, **k):
         return _widget(key, value)
 
@@ -128,7 +132,8 @@ def creer():
     st.download_button, st.segmented_control, st.pills = download_button, segmented_control, pills
     st.text_input, st.text_area, st.date_input, st.number_input = text_input, text_area, date_input, number_input
     st.file_uploader, st.columns, st.rerun, st.cache_data = file_uploader, columns, rerun, cache_data
-    st.expander = st.form = st.spinner = st.status = lambda *a, **k: _Bloc()
+    st.selectbox = selectbox
+    st.expander = st.form = st.spinner = st.status = st.popover = lambda *a, **k: _Bloc()
     st.form_submit_button = lambda *a, **k: False
     st.progress = lambda *a, **k: _Bloc()
     return st
