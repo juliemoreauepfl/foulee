@@ -54,7 +54,11 @@ class StockageSupabase:
     nom = "Supabase"
 
     def __init__(self, url: str, cle: str, prefixe: str = ""):
-        self.url = url.rstrip("/") + f"/rest/v1/{TABLE}"
+        base = url.strip().rstrip("/")
+        for fin in ("/rest/v1", "/rest"):          # URL copiée depuis la page « Data API »
+            if base.endswith(fin):
+                base = base[: -len(fin)]
+        self.url = base + f"/rest/v1/{TABLE}"
         self.prefixe = prefixe
         self.h = {"apikey": cle, "Content-Type": "application/json"}
         if cle.startswith("eyJ"):  # ancienne clé service_role (JWT) : acceptée aussi en Bearer
