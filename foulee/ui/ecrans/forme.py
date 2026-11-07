@@ -51,10 +51,11 @@ def afficher():
           <span class="f-sous">moy. {moy}</span></div>
           <div style="margin-top:8px">{T.barres_sommeil([JOURS_COURTS[j.weekday()] for j in jours], heures, acc)}</div></div>''')
 
-    pred = V.temps_predit(ctx.vdot, V.DISTANCES[ctx.profil.distance])
+    dist = ctx.profil.distance if ctx.profil.distance in V.DISTANCES else "10k"
+    pred = V.temps_predit(ctx.vdot, V.DISTANCES[dist])
     html(f'''<div class="f-sombre"><div class="f-ligne"><span class="f-sous">Ton niveau aujourd'hui</span>
       <span class="f-titre" style="font-size:22px;color:{acc}">VDOT {ctx.vdot:.0f}</span></div>
-      <p style="margin:8px 0 0;font-size:14px">Chrono prédit sur {V.NOMS_DISTANCES[ctx.profil.distance].lower()} : <b>{fmt_duree(pred)}</b></p></div>''')
+      <p style="margin:8px 0 0;font-size:14px">Chrono prédit sur {V.NOMS_DISTANCES[dist].lower()} : <b>{fmt_duree(pred)}</b></p></div>''')
 
     acts = ctx.activites
     if acts is not None and not acts.empty:

@@ -7,7 +7,9 @@ create table if not exists public.foulee (
   maj    timestamptz not null default now()
 );
 
--- Sécurité : on active RLS SANS aucune règle.
--- Résultat : personne ne peut lire la table depuis l'extérieur,
--- seule ta clé secrète (rangée dans les secrets Streamlit) y a accès.
+-- Sécurité : RLS activé SANS aucune règle → personne ne peut lire la table de l'extérieur…
 alter table public.foulee enable row level security;
+
+-- …sauf ta clé secrète (rôle service_role), utilisée par l'app.
+-- Nécessaire si « Automatically expose new tables » est décoché (recommandé).
+grant select, insert, update, delete on table public.foulee to service_role;

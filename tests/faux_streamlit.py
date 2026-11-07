@@ -50,6 +50,7 @@ def creer():
             super().clear()
     st.query_params = Params()
     st.link_button = lambda label, url, **k: _note("button", label, None)
+    st.toggle = lambda label, value=False, key=None, **k: _widget(key, value)
 
     def _note(kind, *a):
         st.journal.append((kind, a))

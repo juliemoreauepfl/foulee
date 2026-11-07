@@ -135,3 +135,35 @@ def test_parcours_velo(app):
             if s.sport == "velo":
                 zwo = True
     assert zwo
+
+
+def test_forme_graphe_et_reglages(app):
+    st, passer = app
+    passer(["lien_demo"])
+    passer(["accent_objectif"])
+    passer(["accent_creer"], obj_distance="Rester en forme", obj_velo=2)
+    p = st.session_state.etat["profil"]
+    assert p["distance"] == "forme" and p["date_course"] is None
+    passer(page="semaine")
+    texte = " ".join(str(a) for _, args in st.journal for a in args)
+    assert "Ton cycle de 12 semaines" in texte and "<svg" in texte
+    passer(page="forme")
+    # Réglages : vélo seulement le samedi et le dimanche, renfo coupé
+    passer(["primary_plan"], page="reglages", reg_renfo_on=False, reg_jours_velo=["Sam", "Dim"])
+    p = st.session_state.etat["profil"]
+    assert p["renfo_actif"] is False and p["jours_velo"] == [5, 6]
+    ctx = None
+    passer(page="semaine")
+    ctx = st.session_state.contexte
+    assert not [s for s in ctx.plan.seances() if s.sport == "renfo"]
+    assert all(s.jour.weekday() in (5, 6) for s in ctx.plan.seances() if s.sport == "velo")
+
+
+def test_graphe_course_jour_j(app):
+    st, passer = app
+    passer(["lien_demo"])
+    passer(["accent_objectif"])
+    passer(["accent_creer"])
+    passer(page="semaine")
+    texte = " ".join(str(a) for _, args in st.journal for a in args)
+    assert "jusqu&#x27;au jour J" in texte or "jusqu'au jour J" in texte

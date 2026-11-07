@@ -14,7 +14,7 @@ from .engine import ajustement as AJ
 from .engine import charge as C
 from .engine import vdot as V
 from .engine import vfc as VFC
-from .engine.plan import Plan, Profil, generer_plan, lundi
+from .engine.plan import SEMAINES_FORME, Plan, Profil, generer_plan, lundi
 
 
 def etat_initial() -> dict:
@@ -22,7 +22,8 @@ def etat_initial() -> dict:
         "version": 1,
         "onboarde": False,
         "profil": {"distance": "semi", "date_course": None, "objectif_s": None,
-                   "courses_semaine": 4, "renfo_semaine": 2, "sexe": "", "velo_semaine": 0, "ftp": None},
+                   "courses_semaine": 4, "renfo_semaine": 2, "sexe": "", "velo_semaine": 0, "ftp": None,
+                   "velo_actif": True, "renfo_actif": True, "jours_velo": [0, 1, 2, 3, 4, 5, 6]},
         "mois_exclus": [],
         "plan_debut": None,
         "vdot_depart": None,
@@ -48,6 +49,9 @@ def profil_depuis(etat: dict) -> Profil:
         sexe=p.get("sexe", ""),
         velo_semaine=int(p.get("velo_semaine", 0) or 0),
         ftp=int(p["ftp"]) if p.get("ftp") else None,
+        velo_actif=bool(p.get("velo_actif", True)),
+        renfo_actif=bool(p.get("renfo_actif", True)),
+        jours_velo=tuple(p.get("jours_velo") or (0, 1, 2, 3, 4, 5, 6)),
     )
 
 
@@ -108,6 +112,12 @@ def construire(etat: dict, d: Donnees, aujourd_hui: date) -> Contexte:
     profil.fc_max = C.fc_max_estimee(d.activites)
     vd = etat.get("vdot_depart") or V.vdot_depuis_historique(acts_hist, aujourd_hui, fc_repos=d.fc_repos()) or 40.0
     debut = date.fromisoformat(etat["plan_debut"]) if etat.get("plan_debut") else aujourd_hui
+    if profil.distance == "forme" and aujourd_hui >= lundi(debut) + timedelta(weeks=SEMAINES_FORME - 1):
+        # Sans course en vue, le plan se renouvelle : nouveau cycle à partir de cette semaine
+        debut = lundi(aujourd_hui)
+        etat["plan_debut"] = debut.isoformat()
+        etat.setdefault("notes", []).append({"jour": aujourd_hui.isoformat(), "cle": f"cycle-{debut.isoformat()}",
+                                             "texte": "Nouveau cycle de 12 semaines : je repars de ta forme actuelle."})
     port = portrait(d, etat.get("mois_exclus", []), debut)
     f = etat.get("facteurs", {})
     plan = generer_plan(profil, debut, vd, port.volume_hebdo, port.plus_longue,

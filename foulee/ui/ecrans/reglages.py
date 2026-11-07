@@ -97,6 +97,31 @@ def afficher():
             E.sauver()
             st.success(f"{n} sortie(s) importée(s).")
 
+    # --- Plan
+    st.subheader("Mon plan")
+    pr = e["profil"]
+    renfo_on = st.toggle("Inclure le renfo au plan", value=bool(pr.get("renfo_actif", True)), key="reg_renfo_on")
+    velo_on = st.toggle("Inclure le vélo / home trainer au plan", value=bool(pr.get("velo_actif", True)),
+                        key="reg_velo_on")
+    jours_lib = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+    jours_sel = pr.get("jours_velo") or list(range(7))
+    choix_jours = jours_sel
+    if velo_on:
+        sel = st.pills("Jours où je peux faire du vélo", jours_lib, selection_mode="multi",
+                       default=[jours_lib[j] for j in jours_sel], key="reg_jours_velo")
+        choix_jours = sorted(jours_lib.index(j) for j in (sel or []))
+        if not pr.get("velo_semaine"):
+            html('<p class="f-sous" style="margin:0">Choisis aussi combien de séances vélo par semaine dans <b>Objectif</b>.</p>')
+        if velo_on and not choix_jours:
+            st.caption("Aucun jour choisi : pas de vélo dans le plan.")
+    if st.button("Appliquer à mon plan", key="primary_plan", type="primary"):
+        pr["renfo_actif"], pr["velo_actif"] = bool(renfo_on), bool(velo_on)
+        pr["jours_velo"] = choix_jours
+        E.sauver()
+        E.invalider()
+        st.toast("Plan mis à jour")
+        st.rerun()
+
     # --- Profil
     st.subheader("Moi")
     prenom = st.text_input("Prénom", value=e.get("prenom", ""))

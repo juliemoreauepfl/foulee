@@ -12,7 +12,7 @@ from .. import etat as E
 from .. import theme as T
 from ..commun import entete, html, nav, titre
 
-CODES = {"5 km": "5k", "10 km": "10k", "Semi": "semi", "Marathon": "marathon"}
+CODES = {"5 km": "5k", "10 km": "10k", "Semi": "semi", "Marathon": "marathon", "Rester en forme": "forme"}
 
 
 def afficher():
@@ -30,20 +30,27 @@ def afficher():
                                     key="obj_distance")
     distance = CODES.get(dist_lib or "Semi", "semi")
 
-    c1, c2 = st.columns(2)
-    with c1:
-        date_defaut = date.fromisoformat(p["date_course"]) if p.get("date_course") else auj + timedelta(weeks=16)
-        date_course = st.date_input("Date de la course", value=max(date_defaut, auj + timedelta(days=14)),
-                                    min_value=auj + timedelta(days=14), max_value=auj + timedelta(weeks=52),
-                                    format="DD/MM/YYYY", key="obj_date")
-    with c2:
-        defaut_txt = fmt_duree(p["objectif_s"]) if p.get("objectif_s") else ""
-        chrono_txt = st.text_input("Chrono visé (facultatif)", value=defaut_txt, placeholder="1:45:00", key="obj_chrono")
-    objectif_s = parse_chrono(chrono_txt)
-    if objectif_s and distance in ("semi", "marathon") and objectif_s < 30 * 60:
-        objectif_s *= 60  # « 1:45 » voulait dire 1 h 45
-    if chrono_txt and not objectif_s:
-        st.caption("Format attendu : 1:45:00 ou 45:30.")
+    forme = distance == "forme"
+    date_course, objectif_s = None, None
+    if forme:
+        html('<div class="f-bleu">Pas de course en vue : on entretient et on progresse en douceur, '
+             'par cycles de 4 semaines (3 variées + 1 plus légère) qui se renouvellent tout seuls.</div>')
+    if not forme:
+        c1, c2 = st.columns(2)
+        with c1:
+            date_defaut = date.fromisoformat(p["date_course"]) if p.get("date_course") else auj + timedelta(weeks=16)
+            date_course = st.date_input("Date de la course", value=max(date_defaut, auj + timedelta(days=14)),
+                                        min_value=auj + timedelta(days=14), max_value=auj + timedelta(weeks=52),
+                                        format="DD/MM/YYYY", key="obj_date")
+        with c2:
+            defaut_txt = fmt_duree(p["objectif_s"]) if p.get("objectif_s") else ""
+            chrono_txt = st.text_input("Chrono visé (facultatif)", value=defaut_txt, placeholder="1:45:00",
+                                       key="obj_chrono")
+        objectif_s = parse_chrono(chrono_txt)
+        if objectif_s and distance in ("semi", "marathon") and objectif_s < 30 * 60:
+            objectif_s *= 60  # « 1:45 » voulait dire 1 h 45
+        if chrono_txt and not objectif_s:
+            st.caption("Format attendu : 1:45:00 ou 45:30.")
 
     courses = st.segmented_control("Course à pied par semaine", [2, 3, 4, 5, 6, 7],
                                    default=int(p.get("courses_semaine", 4)), key="obj_courses",
@@ -64,8 +71,12 @@ def afficher():
     d = E.donnees()
     port = coach.portrait(d, e.get("mois_exclus", []), auj)
     vd = port.vdot or 40.0
-    semaines = max(1, (date_course - auj).days // 7)
-    verdict, _ = V.faisabilite(vd, distance, objectif_s, semaines)
+    if forme:
+        verdict = (f"Repère : je te prédis {fmt_duree(V.temps_predit(vd, 10000))} sur 10 km aujourd'hui. "
+                   "On garde le cap, sans pression.")
+    else:
+        semaines = max(1, (date_course - auj).days // 7)
+        verdict, _ = V.faisabilite(vd, distance, objectif_s, semaines)
     a = V.allures(vd)
     html(f'''<div class="f-sombre">
       <div class="f-ligne"><span class="f-sous">Ton niveau, d'après tes derniers mois</span>
@@ -78,7 +89,7 @@ def afficher():
 
     libelle = "Créer mon plan" if premiere or not e.get("plan_debut") else "Mettre à jour mon plan"
     if st.button(libelle, key="accent_creer"):
-        p.update(distance=distance, date_course=date_course.isoformat(), objectif_s=objectif_s,
+        p.update(distance=distance, date_course=date_course.isoformat() if date_course else None, objectif_s=objectif_s,
                  courses_semaine=int(courses or 4), renfo_semaine=int(renfo if renfo is not None else 2),
                  velo_semaine=int(velo or 0), ftp=int(ftp) if ftp else None)
         coach.demarrer_plan(e, d, auj)

@@ -48,3 +48,10 @@ def test_erreur_400_explique_sans_montrer_la_cle():
     with pytest.raises(G.GarminErreur) as e:
         c.jeton()
     assert "400" in str(e.value) and "ma-cle" not in str(e.value) and "Invalid API key" in str(e.value)
+
+
+def test_url_supabase_tolerante():
+    from foulee.data.store import StockageSupabase
+    for u in ("https://abc.supabase.co", "https://abc.supabase.co/", "https://abc.supabase.co/rest/v1/",
+              " https://abc.supabase.co/rest/v1 "):
+        assert StockageSupabase(u, "sb_secret_x").url == "https://abc.supabase.co/rest/v1/foulee"

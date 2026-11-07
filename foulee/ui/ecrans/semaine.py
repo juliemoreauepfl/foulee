@@ -30,6 +30,7 @@ def afficher():
 
     # En-tête sombre
     p = ctx.profil
+    forme = p.distance == "forme"
     j_moins = (p.date_course - auj).days if p.date_course else 0
     faits = sum(ctx.liens[s.ident]["distance_km"] for s in sem.seances if s.ident in ctx.liens and s.sport != "velo")
     prevus = sem.km
@@ -37,11 +38,13 @@ def afficher():
     obj = f" · objectif {T.esc(_chrono(p.objectif_s))}" if p.objectif_s else ""
     html(f'''<div class="f-sombre"><div class="f-ligne">
       <span class="f-sous">{V.NOMS_DISTANCES[p.distance]}{obj}</span>
-      <span class="f-titre" style="font-size:24px;color:{E.accent()}">J-{max(j_moins, 0)}</span></div>
+      <span class="f-titre" style="font-size:24px;color:{E.accent()}">{f"Sem. {idx % 4 + 1}/4" if forme else f"J-{max(j_moins, 0)}"}</span></div>
       <div class="f-ligne" style="margin-top:6px"><span class="f-titre" style="font-size:30px">{faits:.0f}
       <span style="font-size:16px;font-weight:500;color:#CFCBC4">/ {prevus:.0f} km</span></span>
-      <span class="f-sous">Phase : {PHASES[sem.phase].lower()}</span></div>
+      <span class="f-sous">{("Semaine plus légère" if sem.phase == "base" else "Semaine de travail") if forme else "Phase : " + PHASES[sem.phase].lower()}</span></div>
       <div class="f-barre" style="margin-top:10px" role="img" aria-label="{faits:.0f} km sur {prevus:.0f}"><div style="width:{pct}%"></div></div></div>''')
+
+    _graphe(ctx, idx, forme)
 
     c1, c2, c3 = st.columns([1, 1.4, 1])
     with c1:
@@ -124,6 +127,35 @@ def afficher():
     notes = [n for n in e.get("notes", []) if sem.debut.isoformat() <= n["jour"] < (sem.debut + timedelta(days=7)).isoformat()]
     for n in notes[-3:]:
         note_coach(n["texte"])
+
+
+def _graphe(ctx, idx, forme):
+    """Charge prévue / réalisée de chaque semaine jusqu'à l'objectif."""
+    from ...engine.plan import charge_seance
+    e = E.etat()
+    auj = ctx.aujourd_hui
+    lignes = []
+    for i, sem in enumerate(ctx.plan.semaines):
+        faite = None
+        if sem.debut <= auj:
+            faite = 0.0
+            for s in sem.seances:
+                act = ctx.liens.get(s.ident)
+                if act:
+                    faite += charge_seance(s, act["duree_s"] / 60)
+                elif s.sport == "renfo" and s.jour.isoformat() in e.get("renfo_faits", {}):
+                    faite += charge_seance(s)
+        lignes.append({"prevue": sem.charge, "faite": faite, "phase": sem.phase, "courante": i == idx,
+                       "jour_j": any(s.sport == "course_cible" for s in sem.seances)})
+    pic = max(range(len(lignes)), key=lambda i: lignes[i]["prevue"])
+    titre = "Ton cycle de 12 semaines" if forme else "Ton plan jusqu'au jour J"
+    sous = (f"Charge prévue par semaine. Pic en semaine {pic + 1}, puis affûtage pour arriver frais."
+            if not forme else "Charge prévue par semaine : 3 semaines de travail, 1 plus légère.")
+    html(f'''<div class="f-carte"><div class="f-ligne"><h2 class="f-titre" style="font-size:20px">{titre}</h2>
+      <span class="f-sous">{len(lignes)} sem.</span></div>
+      <div style="margin-top:6px">{T.graphe_plan(lignes, E.accent())}</div>
+      {T.legende_phases([l["phase"] for l in lignes], E.accent())}
+      <p class="f-sous" style="margin:4px 0 0;line-height:1.4">{sous}</p></div>''')
 
 
 def _chip(txt, ton):

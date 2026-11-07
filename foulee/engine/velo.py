@@ -61,7 +61,8 @@ class FabriqueVelo:
 
 
 def placer(seances: list[Seance], debut_sem: date, n: int, phase: str, nb_courses: int,
-           debut: date, date_course: Optional[date], fab: FabriqueVelo) -> list[Seance]:
+           debut: date, date_course: Optional[date], fab: FabriqueVelo,
+           jours_possibles=(0, 1, 2, 3, 4, 5, 6)) -> list[Seance]:
     """Place n séances de vélo : jours sans course d'abord, jamais la veille d'une séance
     dure ni en fin d'affûtage. Durée selon la phase."""
     n = min(max(n, 0), 3)
@@ -73,7 +74,7 @@ def placer(seances: list[Seance], debut_sem: date, n: int, phase: str, nb_course
     dures = {s.jour for s in seances if s.sport in ("course", "course_cible") and s.genre != "footing"}
 
     def ok(j: date) -> bool:
-        if j < debut or j in dures:
+        if j.weekday() not in jours_possibles or j < debut or j in dures:
             return False
         if date_course and (date_course - j).days <= 1:
             return False

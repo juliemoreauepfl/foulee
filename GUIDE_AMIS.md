@@ -27,7 +27,9 @@ se passe sur le téléphone), environ 20 minutes.
    create table if not exists public.foulee (
      cle text primary key, valeur jsonb not null, maj timestamptz not null default now());
    alter table public.foulee enable row level security;
+   grant select, insert, update, delete on table public.foulee to service_role;
    ```
+   (À la création du projet, laisse « Enable Data API » coché et « Automatically expose new tables » décoché.)
 3. **Project Settings › API Keys** : copie l'**URL du projet** et la **clé secrète**
    (elle commence par `sb_secret_`).
 

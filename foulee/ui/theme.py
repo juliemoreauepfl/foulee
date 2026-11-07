@@ -216,3 +216,53 @@ def barres_sommeil(jours, heures, accent=ACCENT) -> str:
                     f'<div style="width:100%;height:{hauteur:.0f}px;border-radius:10px;background:{couleur}"></div>'
                     f'<span class="f-sous" style="font-size:12px">{esc(j)}</span></div>')
     return f'<div style="display:grid;grid-template-columns:repeat({len(cols)},minmax(0,1fr));gap:8px">{"".join(cols)}</div>'
+
+
+COULEURS_PHASES = {"base": "#D9D2C7", "dev": "#9DB0F0", "spe": None, "aff": "#7CC59A"}
+
+
+def graphe_plan(semaines: list[dict], accent: str = ACCENT, w: int = 340, h: int = 150) -> str:
+    """Charge prévue par semaine (barres colorées par phase), charge réalisée (barre noire
+    à l'intérieur), semaine en cours entourée, drapeau le jour J."""
+    if not semaines:
+        return ""
+    n = len(semaines)
+    haut = max(max(s["prevue"] for s in semaines), max((s["faite"] or 0) for s in semaines), 1) * 1.12
+    marge_b = 18
+    pas = (w - 4) / n
+    larg = max(3.0, pas * 0.72)
+    sy = lambda v: (h - marge_b) * (1 - v / haut)
+    barres = []
+    for i, s in enumerate(semaines):
+        x = 2 + i * pas + (pas - larg) / 2
+        coul = COULEURS_PHASES.get(s["phase"]) or accent
+        y = sy(s["prevue"])
+        barres.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{larg:.1f}" height="{h - marge_b - y:.1f}" rx="{min(4, larg / 2):.1f}" fill="{coul}"/>')
+        if s["faite"]:
+            yf = sy(s["faite"])
+            lf = larg * 0.5
+            barres.append(f'<rect x="{x + (larg - lf) / 2:.1f}" y="{yf:.1f}" width="{lf:.1f}" height="{h - marge_b - yf:.1f}" '
+                          f'rx="{min(3, lf / 2):.1f}" fill="{ENCRE}"/>')
+        if s["courante"]:
+            barres.append(f'<rect x="{x - 2:.1f}" y="{y - 3:.1f}" width="{larg + 4:.1f}" height="{h - marge_b - y + 3:.1f}" '
+                          f'rx="5" fill="none" stroke="{ENCRE}" stroke-width="2"/>'
+                          f'<text x="{x + larg / 2:.1f}" y="{h - 4}" font-size="10" text-anchor="middle" fill="{ENCRE}" '
+                          f'font-family="Inter, sans-serif" font-weight="600">auj.</text>')
+        if s.get("jour_j"):
+            xf = x + larg / 2
+            barres.append(f'<path d="M{xf:.1f} {y - 4:.1f} V{y - 22:.1f} l9 4 l-9 4" stroke="{ENCRE}" stroke-width="2" '
+                          f'fill="{accent}" stroke-linejoin="round"/>'
+                          f'<text x="{xf:.1f}" y="{h - 4}" font-size="10" text-anchor="middle" fill="{ENCRE}" '
+                          f'font-family="Inter, sans-serif" font-weight="600">J</text>')
+    return (f'<svg viewBox="0 -24 {w} {h + 24}" width="100%" role="img" aria-label="Charge d\'entraînement prévue et '
+            f'réalisée par semaine jusqu\'à l\'objectif">{"".join(barres)}</svg>')
+
+
+def legende_phases(phases: list[str], accent: str = ACCENT) -> str:
+    noms = {"base": "Base", "dev": "Développement", "spe": "Spécifique", "aff": "Affûtage"}
+    items = [f'<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px">'
+             f'<span style="width:12px;height:12px;border-radius:4px;background:{COULEURS_PHASES.get(p) or accent}"></span>'
+             f'{noms[p]}</span>' for p in dict.fromkeys(phases)]
+    items.append(f'<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:6px;height:12px;'
+                 f'border-radius:3px;background:{ENCRE}"></span>Réalisé</span>')
+    return f'<div class="f-sous" style="font-size:12px;line-height:2">{"".join(items)}</div>'

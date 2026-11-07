@@ -6,7 +6,8 @@ import math
 from typing import Optional
 
 DISTANCES = {"5k": 5000.0, "10k": 10000.0, "semi": 21097.5, "marathon": 42195.0}
-NOMS_DISTANCES = {"5k": "5 km", "10k": "10 km", "semi": "Semi-marathon", "marathon": "Marathon"}
+NOMS_DISTANCES = {"5k": "5 km", "10k": "10 km", "semi": "Semi-marathon", "marathon": "Marathon",
+                  "forme": "Rester en forme"}
 
 
 def vo2_vitesse(v_m_min: float) -> float:

@@ -16,9 +16,10 @@ from .velo import placer as placer_velo
 from .seances import (CONTINU, ECHAUFFEMENT, EFFORT, RECUP, RETOUR, Bloc, Etape, Seance,
                       fmt_duree)
 
-PIC = {"5k": 32, "10k": 42, "semi": 50, "marathon": 65}
-LONGUE_MAX = {"5k": 14, "10k": 17, "semi": 21, "marathon": 32}
-AFFUTAGE = {"5k": [0.65], "10k": [0.65], "semi": [0.75, 0.55], "marathon": [0.8, 0.65, 0.45]}
+PIC = {"5k": 32, "10k": 42, "semi": 50, "marathon": 65, "forme": 40}
+LONGUE_MAX = {"5k": 14, "10k": 17, "semi": 21, "marathon": 32, "forme": 16}
+AFFUTAGE = {"5k": [0.65], "10k": [0.65], "semi": [0.75, 0.55], "marathon": [0.8, 0.65, 0.45], "forme": []}
+SEMAINES_FORME = 12   # en mode « rester en forme », le plan avance par cycles de 12 semaines
 
 # Jour de la semaine (0 = lundi) → rôle : Q = qualité 1, Q2 = qualité 2, E = facile, L = longue
 GABARITS = {
@@ -30,6 +31,15 @@ GABARITS = {
     7: {0: "E", 1: "Q", 2: "E", 3: "Q2", 4: "E", 5: "E", 6: "L"},
 }
 PHASES = {"base": "Base", "dev": "Développement", "spe": "Spécifique", "aff": "Affûtage"}
+
+# Charge estimée d'une séance : minutes × intensité / 10 (« points »), pour comparer les semaines
+INTENSITE = {"footing": 1.0, "long": 1.15, "cotes": 1.4, "fartlek": 1.4, "seuil": 1.6, "vma": 1.7,
+             "specifique": 1.6, "rappel": 1.3, "course": 2.0, "renfo": 0.6,
+             "velo_endurance": 0.7, "velo_tempo": 1.1, "velo_recup": 0.4}
+
+
+def charge_seance(s, minutes: Optional[float] = None) -> float:
+    return (s.minutes if minutes is None else minutes) * INTENSITE.get(s.genre, 1.0) / 10
 
 
 @dataclass
@@ -43,6 +53,9 @@ class Profil:
     velo_semaine: int = 0
     ftp: Optional[int] = None
     fc_max: Optional[float] = None
+    velo_actif: bool = True                  # interrupteur « inclure le vélo au plan »
+    renfo_actif: bool = True                 # interrupteur « inclure le renfo au plan »
+    jours_velo: tuple = (0, 1, 2, 3, 4, 5, 6)   # jours possibles pour le vélo (0 = lundi)
 
 
 @dataclass
@@ -51,6 +64,10 @@ class Semaine:
     phase: str
     km: float
     seances: list[Seance]
+
+    @property
+    def charge(self) -> float:
+        return round(sum(charge_seance(s) for s in self.seances), 1)
 
 
 @dataclass
@@ -192,6 +209,8 @@ class _Fabrique:
 
 
 def allure_cible(vdot: float, distance: str, objectif_s: Optional[int]) -> float:
+    if distance not in V.DISTANCES:   # « rester en forme » : repère = allure 10 km
+        return V.allure_course(vdot, "10k")
     pred = V.allure_course(vdot, distance)
     if not objectif_s:
         return pred
@@ -201,7 +220,8 @@ def allure_cible(vdot: float, distance: str, objectif_s: Optional[int]) -> float
 
 def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float, plus_longue_km: float,
                  facteur_allure: float = 1.0, facteur_volume: float = 1.0) -> Plan:
-    if profil.date_course is None:
+    forme = profil.distance == "forme"
+    if profil.date_course is None and not forme:
         profil.date_course = debut + timedelta(weeks=12)
     A = {k: (round(lo * facteur_allure), round(hi * facteur_allure)) for k, (lo, hi) in V.allures(vdot).items()}
     ac = allure_cible(vdot, profil.distance, profil.objectif_s) * facteur_allure
@@ -211,14 +231,19 @@ def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float,
     n = min(max(profil.courses_semaine, 2), 7)
     gabarit = GABARITS[n]
     premier = lundi(debut)
-    nb_sem = max(1, (lundi(profil.date_course) - premier).days // 7 + 1)
+    if forme:
+        nb_sem = SEMAINES_FORME
+        jj = premier + timedelta(weeks=nb_sem + 60)   # pas de course : date lointaine fictive
+    else:
+        jj = profil.date_course
+        nb_sem = max(1, (lundi(jj) - premier).days // 7 + 1)
     aff = AFFUTAGE[profil.distance][:max(0, nb_sem - 1)]
     construction = nb_sem - len(aff)
     fin_base = math.ceil(construction * 0.35)
     fin_dev = fin_base + math.ceil(construction * 0.35)
 
     v_depart = max(volume_depart, 3.5 * n)
-    pic = max(v_depart, min(PIC[profil.distance], v_depart * 1.7))
+    pic = max(v_depart, min(PIC[profil.distance], v_depart * (1.12 if forme else 1.7)))
     longue_dep = max(plus_longue_km, 6.0)
     part_longue = {2: 0.45, 3: 0.35}.get(n, 0.3)
     e_mid = _mid(A["E"])
@@ -232,7 +257,10 @@ def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float,
             phase = "aff"
             vol = pic * aff[i - construction]
         else:
-            phase = "base" if i < fin_base else ("dev" if i < fin_dev else "spe")
+            if forme:   # cycles de 4 semaines : 3 de travail varié, 1 plus légère
+                phase = "base" if i % 4 == 3 else "dev"
+            else:
+                phase = "base" if i < fin_base else ("dev" if i < fin_dev else "spe")
             if i > 0 and i % 4 == 3:
                 vol = vol_cible * 0.8          # semaine allégée
             else:
@@ -271,30 +299,30 @@ def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float,
 
         for j in sorted(roles):
             jour = debut_sem + timedelta(days=j)
-            if jour < debut or jour >= profil.date_course:
+            if jour < debut or jour >= jj:
                 continue
             role = roles[j]
             if role.startswith("Q"):
-                if 0 < (profil.date_course - jour).days <= 2:
+                if 0 < (jj - jour).days <= 2:
                     seances.append(fab.footing(jour, 20, "Footing + 4 lignes droites"))
                 else:
                     seances.append(qualites[j])
             elif role == "L":
-                if (profil.date_course - jour).days <= 6:
+                if (jj - jour).days <= 6:
                     seances.append(fab.footing(jour, _arrondi5(min(km_longue, 10) * e_mid / 60)))
                 else:
                     seances.append(fab.longue(jour, _arrondi5(km_longue * e_mid / 60)))
             else:
-                if 0 < (profil.date_course - jour).days <= 1:
+                if 0 < (jj - jour).days <= 1:
                     continue  # veille de course : repos
                 seances.append(fab.footing(jour, _arrondi5(km_e * e_mid / 60)))
 
-        if debut_sem <= profil.date_course < debut_sem + timedelta(days=7):
-            seances.append(fab.jour_j(profil.date_course, profil.objectif_s))
+        if debut_sem <= jj < debut_sem + timedelta(days=7):
+            seances.append(fab.jour_j(jj, profil.objectif_s))
 
         seances += _placer_renfo(seances, debut_sem, profil, debut)
-        seances += placer_velo(seances, debut_sem, profil.velo_semaine, phase, n, debut,
-                               profil.date_course, fab_velo)
+        seances += placer_velo(seances, debut_sem, profil.velo_semaine if profil.velo_actif else 0, phase, n,
+                               debut, None if forme else jj, fab_velo, profil.jours_velo)
         ordre = {"course": 0, "course_cible": 0, "velo": 1, "renfo": 2}
         seances.sort(key=lambda s: (s.jour, ordre.get(s.sport, 3)))
         semaines.append(Semaine(debut_sem, phase, round(sum(s.km for s in seances), 1), seances))
@@ -305,7 +333,7 @@ def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float,
 
 
 def _placer_renfo(seances: list[Seance], debut_sem: date, profil: Profil, debut: date) -> list[Seance]:
-    r = min(max(profil.renfo_semaine, 0), 3)
+    r = min(max(profil.renfo_semaine, 0), 3) if profil.renfo_actif else 0
     if r == 0:
         return []
     dures = {s.jour for s in seances if s.genre not in ("footing",)}
