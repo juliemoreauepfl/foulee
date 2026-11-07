@@ -141,7 +141,27 @@ class ClientGarmin:
                     if m:
                         lignes.append({"date": jour, **m})
             d = f + timedelta(days=1)
-        return pd.DataFrame(lignes)
+        df = pd.DataFrame(lignes)
+        # FC au repos : si le résumé du jour ne la donne pas, on la lit dans la FC du jour (14 derniers jours)
+        manque = df.empty or "fc_repos" not in df or df["fc_repos"].dropna().empty
+        if manque:
+            rhr = self.fc_repos_jours([fin - timedelta(days=k) for k in range(min(14, (fin - debut).days + 1))])
+            if rhr:
+                extra = pd.DataFrame([{"date": j, "fc_repos": v} for j, v in rhr.items()])
+                df = extra if df.empty else df.drop(columns=["fc_repos"], errors="ignore").merge(extra, on="date", how="outer")
+        return df
+
+    def fc_repos_jours(self, jours: list[date]) -> dict:
+        def un(j):
+            try:
+                rep = self.get("/wellness-service/wellness/dailyHeartRate", {"date": j.isoformat()})
+            except GarminErreur:
+                return j, None
+            if isinstance(rep, dict):
+                return j, _get(rep, "restingHeartRate", "restingHeartRateValue", "lastSevenDaysAvgRestingHeartRate")
+            return j, None
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            return {j: float(v) for j, v in pool.map(un, jours) if v}
 
     def sommeil(self, jours: list[date], progression: Optional[Callable[[float], None]] = None) -> pd.DataFrame:
         def un_jour(j):

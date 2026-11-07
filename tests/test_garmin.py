@@ -76,8 +76,36 @@ def test_garmin_quotidien_client():
             pass
 
         def get(self, chemin, params=None, brut=False):
-            assert chemin == "/usersummary-service/v2/dailysummaries"
+            if chemin != "/usersummary-service/v2/dailysummaries":
+                return None
             return [{"calendarDate": params["startDate"], "totalSteps": 9000, "averageStressLevel": 30}]
     from datetime import date
     df = C().quotidien(date(2026, 9, 1), date(2026, 11, 6))
     assert len(df) == 3 and set(df.columns) == {"date", "pas", "stress"}
+
+
+def test_fc_repos_repli_sur_fc_du_jour():
+    from datetime import date
+
+    class C(G.ClientGarmin):
+        def __init__(self):
+            pass
+
+        def get(self, chemin, params=None, brut=False):
+            if chemin == "/usersummary-service/v2/dailysummaries":
+                return [{"calendarDate": "2026-11-06", "totalSteps": 9000}]       # pas de FC repos ici
+            if chemin == "/wellness-service/wellness/dailyHeartRate":
+                return {"restingHeartRate": 47}
+            return None
+    df = C().quotidien(date(2026, 11, 1), date(2026, 11, 6))
+    assert df["fc_repos"].dropna().iloc[0] == 47
+    assert 9000 in set(df["pas"].dropna())
+
+
+def test_fc_repos_donnees_utilise_le_quotidien():
+    import pandas as pd
+    from datetime import date
+    from foulee.data.donnees import Donnees
+    d = Donnees(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(columns=["date", "heures", "score", "fc_repos"]), "garmin",
+                None, pd.DataFrame([{"date": date(2026, 11, 6), "fc_repos": 46.0}]))
+    assert d.fc_repos() == 46.0

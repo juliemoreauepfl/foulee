@@ -26,10 +26,12 @@ class Donnees:
     quotidien: Optional[pd.DataFrame] = None   # mesures bonus, selon la montre
 
     def fc_repos(self) -> float:
-        if self.sommeil is not None and not self.sommeil.empty:
-            v = pd.to_numeric(self.sommeil["fc_repos"], errors="coerce").dropna().tail(14)
-            if len(v):
-                return float(v.median())
+        """FC au repos : sommeil, sinon résumé du jour, sinon 55 par défaut."""
+        for df in (self.sommeil, self.quotidien):
+            if df is not None and not df.empty and "fc_repos" in df:
+                v = pd.to_numeric(df["fc_repos"], errors="coerce").dropna().tail(14)
+                if len(v):
+                    return float(v.median())
         return 55.0
 
 

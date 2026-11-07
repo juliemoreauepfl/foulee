@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pandas as pd
 import streamlit as st
 
 from ...engine.seances import fmt_date, fmt_duree, fmt_km
@@ -85,7 +86,9 @@ def afficher():
     som = ctx.donnees.sommeil
     nuit = som[som["date"] <= auj].tail(1) if som is not None and not som.empty else None
     h = f'{fmt_duree(float(nuit.iloc[0]["heures"]) * 3600, court=True)}' if nuit is not None and not nuit.empty else "–"
-    fc = f'{int(nuit.iloc[0]["fc_repos"])} bpm' if nuit is not None and not nuit.empty and nuit.iloc[0]["fc_repos"] else "–"
+    fc = "–"
+    if nuit is not None and not nuit.empty and pd.notna(nuit.iloc[0]["fc_repos"]) and nuit.iloc[0]["fc_repos"]:
+        fc = f'{int(nuit.iloc[0]["fc_repos"])} bpm'
     tsb = ctx.charge["fraicheur"].iloc[-1] if not ctx.charge.empty else 0
     q = ctx.donnees.quotidien
     if fc == "–" and q is not None and not q.empty and "fc_repos" in q and q["fc_repos"].notna().any():
