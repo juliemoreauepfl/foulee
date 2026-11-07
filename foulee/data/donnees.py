@@ -11,7 +11,7 @@ from . import demo
 from .garmin import ClientGarmin
 
 HISTORIQUE_JOURS = 183
-COLS_ACT = ["id", "date", "debut", "nom", "distance_km", "duree_s", "fc_moy", "fc_max", "denivele", "sport"]
+COLS_ACT = ["id", "date", "debut", "nom", "distance_km", "duree_s", "fc_moy", "fc_max", "denivele", "sport", "extras"]
 COLS_VFC = ["date", "nuit", "moy_7j", "zone_basse", "zone_haute", "statut"]
 COLS_SOM = ["date", "heures", "score", "fc_repos"]
 
@@ -23,6 +23,7 @@ class Donnees:
     sommeil: pd.DataFrame
     source: str  # "garmin" | "demo"
     maj: Optional[str] = None
+    quotidien: Optional[pd.DataFrame] = None   # mesures bonus, selon la montre
 
     def fc_repos(self) -> float:
         if self.sommeil is not None and not self.sommeil.empty:
@@ -49,9 +50,17 @@ def _vers_records(df: pd.DataFrame) -> list[dict]:
     return d.astype(object).where(d.notna(), None).to_dict("records")
 
 
+def _df_libre(records) -> pd.DataFrame:
+    df = pd.DataFrame(records or [])
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+    return df
+
+
 def depuis_cache(cache: dict) -> Donnees:
     return Donnees(_df(cache.get("activites"), COLS_ACT), _df(cache.get("vfc"), COLS_VFC),
-                   _df(cache.get("sommeil"), COLS_SOM), "garmin", cache.get("maj"))
+                   _df(cache.get("sommeil"), COLS_SOM), "garmin", cache.get("maj"),
+                   _df_libre(cache.get("quotidien")))
 
 
 def rafraichir(client: ClientGarmin, cache: Optional[dict], aujourd_hui: date,
@@ -63,7 +72,7 @@ def rafraichir(client: ClientGarmin, cache: Optional[dict], aujourd_hui: date,
     anciens = depuis_cache(cache)
 
     def depuis(df):
-        if df.empty:
+        if df is None or df.empty or "date" not in df:
             return debut_hist
         return max(debut_hist, max(df["date"]) - timedelta(days=3))
 
@@ -73,7 +82,7 @@ def rafraichir(client: ClientGarmin, cache: Optional[dict], aujourd_hui: date,
         """On ajoute sans jamais jeter l'ancien (Polar ne garde que 30 jours)."""
         if nouveau is None or nouveau.empty:
             return ancien
-        if ancien is None or ancien.empty:
+        if ancien is None or ancien.empty or "date" not in ancien:
             res = nouveau
         else:
             res = pd.concat([ancien, nouveau], ignore_index=True).drop_duplicates(cle, keep="last")
@@ -93,14 +102,23 @@ def rafraichir(client: ClientGarmin, cache: Optional[dict], aujourd_hui: date,
     som = fusion(anciens.sommeil, client.sommeil(jours, lambda p: etape("Sommeil", p)), "date")
     etape("Sommeil", 1.0)
 
+    # Mesures bonus : jamais bloquant (toutes les montres ne les ont pas)
+    quot = anciens.quotidien
+    try:
+        if hasattr(client, "quotidien"):
+            quot = fusion(anciens.quotidien, client.quotidien(depuis(anciens.quotidien), aujourd_hui), "date")
+    except Exception:
+        pass
+
     from datetime import datetime
     return {"activites": _vers_records(acts), "vfc": _vers_records(vfc), "sommeil": _vers_records(som),
+            "quotidien": _vers_records(quot),
             "maj": datetime.now().isoformat(timespec="minutes")}
 
 
 def donnees_demo(aujourd_hui: date) -> Donnees:
     a, v, s = demo.historique(aujourd_hui)
-    return Donnees(a, v, s, "demo", aujourd_hui.isoformat())
+    return Donnees(a, v, s, "demo", aujourd_hui.isoformat(), demo.quotidien(aujourd_hui))
 
 
 def courses(df: pd.DataFrame) -> pd.DataFrame:

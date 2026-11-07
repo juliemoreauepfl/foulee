@@ -52,7 +52,7 @@ def afficher():
         if chrono_txt and not objectif_s:
             st.caption("Format attendu : 1:45:00 ou 45:30.")
 
-    courses = st.segmented_control("Course à pied par semaine", [2, 3, 4, 5, 6, 7],
+    courses = st.segmented_control("Course à pied par semaine", [1, 2, 3, 4, 5, 6, 7],
                                    default=int(p.get("courses_semaine", 4)), key="obj_courses",
                                    format_func=lambda n: f"{n}×")
     renfo = st.segmented_control("Renfo par semaine (~20 min)", [0, 1, 2, 3],

@@ -132,11 +132,24 @@ def afficher():
                                    default={"#C8F169": "Citron", "#FFC93C": "Soleil", "#B9A6FF": "Lilas"}.get(e.get("accent"), "Orange"),
                                    key="couleur")
     couleurs = {"Orange": "#FF6B2C", "Citron": "#C8F169", "Soleil": "#FFC93C", "Lilas": "#B9A6FF"}
+    c1, c2 = st.columns(2)
+    with c1:
+        age = st.number_input("Âge", min_value=0, max_value=100, step=1, value=int(e["profil"].get("age") or 0),
+                              key="reg_age", help="Sert à estimer ta FC max si ta montre n'en a pas encore mesuré, "
+                                                  "et à espacer un peu plus les semaines de récup à partir de 50 ans.")
+    with c2:
+        poids = st.number_input("Poids (kg)", min_value=0.0, max_value=200.0, step=0.5,
+                                value=float(e["profil"].get("poids") or 0.0), key="reg_poids",
+                                help="Sert uniquement à calculer ta puissance vélo en W/kg.")
     ftp = st.number_input("FTP vélo (watts, 0 = inconnue)", min_value=0, max_value=600, step=5,
                           value=int(e["profil"].get("ftp") or 0), key="reg_ftp",
                           help="Après un bon échauffement : 20 min le plus fort possible mais régulier. FTP ≈ 95 % de la puissance moyenne.")
+    if ftp and poids:
+        html(f'<p class="f-sous" style="margin:-6px 0 0">Soit {ftp / poids:.1f} W/kg.</p>'.replace(".", ",", 1))
     if st.button("Enregistrer", key="primary_profil", type="primary"):
         e["prenom"] = prenom.strip()
+        e["profil"]["age"] = int(age) if age else None
+        e["profil"]["poids"] = float(poids) if poids else None
         e["profil"]["ftp"] = int(ftp) if ftp else None
         e["profil"]["sexe"] = {"Femme": "femme", "Homme": "homme"}.get(sexe or "", "")
         e["accent"] = couleurs.get(couleur or "Orange")

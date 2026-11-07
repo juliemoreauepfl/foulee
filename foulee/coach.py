@@ -52,7 +52,17 @@ def profil_depuis(etat: dict) -> Profil:
         velo_actif=bool(p.get("velo_actif", True)),
         renfo_actif=bool(p.get("renfo_actif", True)),
         jours_velo=tuple(p.get("jours_velo") or (0, 1, 2, 3, 4, 5, 6)),
+        age=int(p["age"]) if p.get("age") else None,
+        poids=float(p["poids"]) if p.get("poids") else None,
     )
+
+
+def fc_max_profil(activites, age) -> float:
+    """FC max : mesurée sur tes sorties si possible, sinon estimée par l'âge (Tanaka : 208 − 0,7 × âge)."""
+    mesuree = C.fc_max_estimee(activites)
+    if mesuree:
+        return mesuree
+    return 208 - 0.7 * age if age else 190.0
 
 
 @dataclass
@@ -109,7 +119,7 @@ class Contexte:
 def construire(etat: dict, d: Donnees, aujourd_hui: date) -> Contexte:
     profil = profil_depuis(etat)
     acts_hist = courses(filtrer_mois(d.activites, etat.get("mois_exclus", [])))
-    profil.fc_max = C.fc_max_estimee(d.activites)
+    profil.fc_max = fc_max_profil(d.activites, profil.age)
     vd = etat.get("vdot_depart") or V.vdot_depuis_historique(acts_hist, aujourd_hui, fc_repos=d.fc_repos()) or 40.0
     debut = date.fromisoformat(etat["plan_debut"]) if etat.get("plan_debut") else aujourd_hui
     if profil.distance == "forme" and aujourd_hui >= lundi(debut) + timedelta(weeks=SEMAINES_FORME - 1):
@@ -144,7 +154,7 @@ def construire(etat: dict, d: Donnees, aujourd_hui: date) -> Contexte:
         AJ.appliquer_ajustements(plan, etat.get("ajustements", {}))
         liens, libres = AJ.apparier(plan.seances(), a_apparier)
 
-    fc_max = C.fc_max_estimee(activites) or 190.0
+    fc_max = fc_max_profil(activites, profil.age)
     serie = C.serie_charge(activites, d.fc_repos(), fc_max, profil.sexe,
                            aujourd_hui - timedelta(days=120), aujourd_hui)
     attente = AJ.bilans_en_attente(etat, liens, libres, plan, aujourd_hui)

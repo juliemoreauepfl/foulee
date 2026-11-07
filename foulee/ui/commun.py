@@ -97,6 +97,34 @@ def tuiles(valeurs: list[tuple[str, str, str]]):
     html(f'<div class="f-grille{len(valeurs)}">{contenu}</div>')
 
 
+def extras_html(extras, sombre: bool = False) -> str:
+    """Petites pastilles avec les mesures avancées d'une sortie (seulement celles qui existent)."""
+    from ..data.metriques import ACTIVITE, formater
+    if not isinstance(extras, dict) or not extras:
+        return ""
+    ordre = ["cadence", "cadence_velo", "puissance", "puissance_norm", "te_aerobie", "te_anaerobie", "charge",
+             "contact_sol", "oscillation", "foulee", "calories"]
+    fond, coul = ("#2A2A33", "#E9E6E0") if sombre else (T.CREME, T.GRIS_TEXTE)
+    puces = [f'<span class="f-tag" style="background:{fond};color:{coul};font-weight:500">'
+             f'{T.esc(ACTIVITE[k][0])} <b>{T.esc(formater(k, extras[k], {kk: (*v, "") for kk, v in ACTIVITE.items()}))}</b></span>'
+             for k in ordre if k in extras]
+    return f'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">{"".join(puces)}</div>' if puces else ""
+
+
+def mesures_du_jour(quotidien, jour, cles) -> list[tuple[str, str, str]]:
+    """Tuiles (libellé, valeur, couleur) pour les mesures du jour disponibles."""
+    from ..data.metriques import QUOTIDIEN, formater
+    if quotidien is None or quotidien.empty:
+        return []
+    recents = quotidien[quotidien["date"] <= jour].tail(2)
+    res = []
+    for k in cles:
+        if k in recents and recents[k].notna().any():
+            v = recents[k].dropna().iloc[-1]
+            res.append((QUOTIDIEN[k][0], formater(k, v), T.ENCRE))
+    return res
+
+
 def carte_exo(exo, sous: str = ""):
     img = T.image_exo(exo.image)
     html(f'''<div class="f-exo"><img src="{img}" alt="{T.esc(exo.nom)}">

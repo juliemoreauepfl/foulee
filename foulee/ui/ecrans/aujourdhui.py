@@ -8,7 +8,7 @@ import streamlit as st
 from ...engine.seances import fmt_date, fmt_duree, fmt_km
 from .. import etat as E
 from .. import theme as T
-from ..commun import bouton_fit, boutons_velo, carte_seance, entete, html, jour_txt, nav, note_coach, tag_seance, tuiles
+from ..commun import bouton_fit, boutons_velo, carte_seance, mesures_du_jour, entete, html, jour_txt, nav, note_coach, tag_seance, tuiles
 
 ACCROCHES = {
     "soleil": "Ton corps dit :<br>on y va.",
@@ -87,5 +87,11 @@ def afficher():
     h = f'{fmt_duree(float(nuit.iloc[0]["heures"]) * 3600, court=True)}' if nuit is not None and not nuit.empty else "–"
     fc = f'{int(nuit.iloc[0]["fc_repos"])} bpm' if nuit is not None and not nuit.empty and nuit.iloc[0]["fc_repos"] else "–"
     tsb = ctx.charge["fraicheur"].iloc[-1] if not ctx.charge.empty else 0
+    q = ctx.donnees.quotidien
+    if fc == "–" and q is not None and not q.empty and "fc_repos" in q and q["fc_repos"].notna().any():
+        fc = f'{int(q["fc_repos"].dropna().iloc[-1])} bpm'
     tuiles([("Sommeil", h, T.ENCRE), ("FC repos", fc, T.ENCRE),
             ("Fraîcheur", f"{tsb:+.0f}", T.BLEU if tsb >= 0 else T.ORANGE_TEXTE)])
+    bonus = mesures_du_jour(q, auj, ["bb_max", "stress", "pas", "recharge_ans", "spo2"])[:3]
+    if len(bonus) >= 2:
+        tuiles(bonus)

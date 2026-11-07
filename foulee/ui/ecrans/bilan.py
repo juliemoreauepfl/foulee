@@ -9,7 +9,7 @@ from ...engine import ajustement as AJ
 from ...engine.seances import fmt_date, fmt_duree, fmt_km
 from .. import etat as E
 from .. import theme as T
-from ..commun import entete, html, titre
+from ..commun import entete, extras_html, html, titre
 
 
 def _tours(act: dict, seance) -> list[dict]:
@@ -70,6 +70,7 @@ def afficher():
         <div><div class="f-sous">Distance</div><div class="f-chiffre">{fmt_km(act["distance_km"])}</div></div>
         <div><div class="f-sous">Durée</div><div class="f-chiffre">{fmt_duree(act["duree_s"])}</div></div>
         <div><div class="f-sous">FC moy.</div><div class="f-chiffre">{fc}</div></div></div>
+      {extras_html(act.get("extras"), sombre=True)}
       {"<ol class='f-etapes'>" + lignes + "</ol>" if lignes else ""}</div>''')
 
     libelles = [lib for _, lib in AJ.RESSENTIS]

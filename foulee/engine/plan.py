@@ -23,6 +23,7 @@ SEMAINES_FORME = 12   # en mode « rester en forme », le plan avance par cycles
 
 # Jour de la semaine (0 = lundi) → rôle : Q = qualité 1, Q2 = qualité 2, E = facile, L = longue
 GABARITS = {
+    1: {6: "L"},   # une seule sortie : alternance sortie longue / séance de qualité (voir plus bas)
     2: {2: "Q", 6: "L"},
     3: {1: "Q", 3: "E", 6: "L"},
     4: {1: "Q", 3: "E", 5: "E", 6: "L"},
@@ -56,6 +57,8 @@ class Profil:
     velo_actif: bool = True                  # interrupteur « inclure le vélo au plan »
     renfo_actif: bool = True                 # interrupteur « inclure le renfo au plan »
     jours_velo: tuple = (0, 1, 2, 3, 4, 5, 6)   # jours possibles pour le vélo (0 = lundi)
+    age: Optional[int] = None
+    poids: Optional[float] = None
 
 
 @dataclass
@@ -228,7 +231,10 @@ def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float,
     fab = _Fabrique(A, ac, profil.distance)
     fab_velo = FabriqueVelo(profil.ftp, profil.fc_max)
 
-    n = min(max(profil.courses_semaine, 2), 7)
+    n = min(max(profil.courses_semaine, 1), 7)
+    # Récupération : semaine allégée toutes les 4 semaines, toutes les 3 à partir de 50 ans
+    # (pratique courante chez les coureurs « masters », qui récupèrent plus lentement)
+    cycle = 3 if (profil.age or 0) >= 50 else 4
     gabarit = GABARITS[n]
     premier = lundi(debut)
     if forme:
@@ -245,7 +251,7 @@ def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float,
     v_depart = max(volume_depart, 3.5 * n)
     pic = max(v_depart, min(PIC[profil.distance], v_depart * (1.12 if forme else 1.7)))
     longue_dep = max(plus_longue_km, 6.0)
-    part_longue = {2: 0.45, 3: 0.35}.get(n, 0.3)
+    part_longue = {1: 0.9, 2: 0.45, 3: 0.35}.get(n, 0.3)
     e_mid = _mid(A["E"])
 
     semaines: list[Semaine] = []
@@ -258,10 +264,10 @@ def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float,
             vol = pic * aff[i - construction]
         else:
             if forme:   # cycles de 4 semaines : 3 de travail varié, 1 plus légère
-                phase = "base" if i % 4 == 3 else "dev"
+                phase = "base" if i % cycle == cycle - 1 else "dev"
             else:
                 phase = "base" if i < fin_base else ("dev" if i < fin_dev else "spe")
-            if i > 0 and i % 4 == 3:
+            if i > 0 and i % cycle == cycle - 1:
                 vol = vol_cible * 0.8          # semaine allégée
             else:
                 if i > 0:
@@ -275,6 +281,9 @@ def generer_plan(profil: Profil, debut: date, vdot: float, volume_depart: float,
         roles = dict(gabarit)
         if nb_q == 1 and i % 2 == 1:
             roles = {j: ("Q2" if r == "Q" else r) for j, r in roles.items()}
+        # Une seule sortie par semaine : une semaine sur deux, elle devient une séance de qualité
+        if n == 1 and phase in ("dev", "spe") and i % 2 == 1:
+            roles = {6: "Q"}
 
         # En phase de base, une seule séance de qualité : la 2e devient un footing
         if phase in ("base", "aff") and nb_q == 2:

@@ -53,7 +53,7 @@ def test_plan_semi():
             assert s.jour + timedelta(days=1) not in dures
 
 
-@pytest.mark.parametrize("n", [2, 3, 4, 5, 6, 7])
+@pytest.mark.parametrize("n", [1, 2, 3, 4, 5, 6, 7])
 @pytest.mark.parametrize("dist", ["5k", "10k", "semi", "marathon"])
 def test_plan_toutes_configs(n, dist):
     p = Profil(dist, AUJ + timedelta(weeks=10), None, n, 1)
@@ -164,3 +164,16 @@ def test_douleur_impact_passe_en_velo():
     ctx2 = coach.construire(etat, d, AUJ)
     remplace = [s for s in ctx2.plan.seances() if s.sport == "velo" and s.allegee]
     assert remplace, "le prochain footing doit passer en vélo"
+
+
+def test_une_sortie_et_age():
+    p = Profil("10k", AUJ + timedelta(weeks=14), None, 1, 0)
+    plan = generer_plan(p, AUJ, 42, 15, 10)
+    for sem in plan.semaines[1:-1]:
+        assert sum(1 for s in sem.seances if s.sport == "course") == 1
+    genres = {s.genre for s in plan.seances() if s.sport == "course"}
+    assert "long" in genres and genres & {"vma", "seuil", "specifique"}
+    jeune = generer_plan(Profil("semi", AUJ + timedelta(weeks=16), None, 4, 0, age=30), AUJ, 44, 30, 15)
+    senior = generer_plan(Profil("semi", AUJ + timedelta(weeks=16), None, 4, 0, age=55), AUJ, 44, 30, 15)
+    assert [s.km for s in jeune.semaines] != [s.km for s in senior.semaines]
+    assert coach.fc_max_profil(None, 40) == pytest.approx(180)

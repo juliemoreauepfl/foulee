@@ -7,7 +7,7 @@ from ...engine import vdot as V
 from ...engine.seances import JOURS_COURTS, fmt_allure, fmt_date, fmt_duree, fmt_km
 from .. import etat as E
 from .. import theme as T
-from ..commun import entete, html, nav
+from ..commun import entete, extras_html, html, nav
 
 
 def afficher():
@@ -57,6 +57,8 @@ def afficher():
       <span class="f-titre" style="font-size:22px;color:{acc}">VDOT {ctx.vdot:.0f}</span></div>
       <p style="margin:8px 0 0;font-size:14px">Chrono prédit sur {V.NOMS_DISTANCES[dist].lower()} : <b>{fmt_duree(pred)}</b></p></div>''')
 
+    _ma_montre(ctx)
+
     acts = ctx.activites
     if acts is not None and not acts.empty:
         lignes = []
@@ -67,6 +69,38 @@ def afficher():
             else:
                 allure = r.duree_s / r.distance_km if r.distance_km else None
                 droite = f"{fmt_km(r.distance_km)} · {fmt_allure(allure)}"
-            lignes.append(f'<li><span>{fmt_date(r.date)} · {T.esc(r.nom)}</span><span>{droite}</span></li>')
+            ex = extras_html(getattr(r, "extras", None))
+            lignes.append(f'<li style="flex-direction:column;gap:0"><div class="f-ligne"><span>{fmt_date(r.date)} · {T.esc(r.nom)}</span>'
+                          f'<span style="font-weight:600">{droite}</span></div>{ex}</li>')
         html(f'<div class="f-carte"><h2 class="f-titre" style="font-size:20px">Dernières sorties</h2>'
-             f'<ol class="f-etapes">{"".join(lignes)}</ol></div>')
+             f'<ol class="f-etapes" style="gap:12px">{"".join(lignes)}</ol></div>')
+
+
+def _ma_montre(ctx):
+    """Tout ce que ta montre mesure en plus : n'apparaît que ce qui existe dans tes données."""
+    from ...data.metriques import QUOTIDIEN, formater
+    q = ctx.donnees.quotidien
+    if q is None or q.empty:
+        return
+    auj = ctx.aujourd_hui
+    sept = q[(q["date"] > auj - timedelta(days=7)) & (q["date"] <= auj)]
+    tuiles = []
+    for k, (lib, _, _, agg) in QUOTIDIEN.items():
+        if k not in q or not q[k].notna().any():
+            continue
+        dern = q[q["date"] <= auj][k].dropna()
+        if dern.empty:
+            continue
+        s = sept[k].dropna() if k in sept else []
+        if agg == "somme":
+            principal, sous = formater(k, s.sum() if len(s) else None) + " / 7 j", "objectif OMS : 150 min / sem."
+        else:
+            principal = formater(k, dern.iloc[-1])
+            sous = f"moy. 7 j : {formater(k, s.mean())}" if len(s) else ""
+        tuiles.append(f'<div class="f-tuile" style="background:{T.CREME}"><div class="f-sous" style="font-size:12px">{T.esc(lib)}</div>'
+                      f'<div class="f-chiffre">{T.esc(principal)}</div><div class="f-sous" style="font-size:11px">{T.esc(sous)}</div></div>')
+    if tuiles:
+        html(f'''<div class="f-carte"><div class="f-ligne"><h2 class="f-titre" style="font-size:20px">Ce que mesure ta montre</h2>
+          <span class="f-sous">{len(tuiles)} mesures</span></div>
+          <div class="f-grille2" style="margin-top:10px">{"".join(tuiles)}</div>
+          <p class="f-sous" style="margin:8px 0 0;line-height:1.4">Seules les mesures que ta montre enregistre s'affichent ici.</p></div>''')

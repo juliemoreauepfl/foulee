@@ -55,3 +55,29 @@ def test_url_supabase_tolerante():
     for u in ("https://abc.supabase.co", "https://abc.supabase.co/", "https://abc.supabase.co/rest/v1/",
               " https://abc.supabase.co/rest/v1 "):
         assert StockageSupabase(u, "sb_secret_x").url == "https://abc.supabase.co/rest/v1/foulee"
+
+
+def test_mesures_bonus_garmin():
+    from foulee.data.metriques import formater, garmin_activite, garmin_quotidien
+    q = garmin_quotidien({"calendarDate": "2026-11-06", "totalSteps": 11234, "bodyBatteryHighestValue": 88,
+                          "restingHeartRate": 48, "moderateIntensityMinutes": 20, "vigorousIntensityMinutes": 15,
+                          "averageSpo2": None})
+    assert q == {"pas": 11234, "bb_max": 88, "fc_repos": 48, "intensite": 50}
+    a = garmin_activite({"averageRunningCadenceInStepsPerMinute": 172.4, "aerobicTrainingEffect": 3.6,
+                         "avgStrideLength": 112.0, "avgPower": None, "avgGroundContactTime": 0})
+    assert a == {"cadence": 172.4, "te_aerobie": 3.6, "foulee": 1.12}
+    assert formater("pas", 11234) == "11 234"
+    assert formater("te_aerobie", 3.6).startswith("3,6")
+
+
+def test_garmin_quotidien_client():
+    class C(G.ClientGarmin):
+        def __init__(self):
+            pass
+
+        def get(self, chemin, params=None, brut=False):
+            assert chemin == "/usersummary-service/v2/dailysummaries"
+            return [{"calendarDate": params["startDate"], "totalSteps": 9000, "averageStressLevel": 30}]
+    from datetime import date
+    df = C().quotidien(date(2026, 9, 1), date(2026, 11, 6))
+    assert len(df) == 3 and set(df.columns) == {"date", "pas", "stress"}

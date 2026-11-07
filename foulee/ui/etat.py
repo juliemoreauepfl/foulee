@@ -127,7 +127,7 @@ def _ajouter_manuelles(d: Donnees) -> Donnees:
     df = pd.DataFrame(man)
     df["date"] = pd.to_datetime(df["date"]).dt.date
     acts = pd.concat([d.activites, df], ignore_index=True) if not d.activites.empty else df
-    return Donnees(acts.drop_duplicates("id", keep="last"), d.vfc, d.sommeil, d.source, d.maj)
+    return Donnees(acts.drop_duplicates("id", keep="last"), d.vfc, d.sommeil, d.source, d.maj, d.quotidien)
 
 
 @st.cache_data(show_spinner=False)

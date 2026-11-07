@@ -101,6 +101,19 @@ class ClientPolar:
         lignes = [x for x in (normaliser_recharge(i) for i in items) if x and debut <= x["date"] <= fin]
         return pd.DataFrame(lignes, columns=["date", "nuit", "moy_7j", "zone_basse", "zone_haute", "statut"])
 
+    def quotidien(self, debut: date, fin: date) -> pd.DataFrame:
+        rep = self.get("/v3/users/nightly-recharge") or {}
+        lignes = []
+        for i in (rep.get("recharges", []) if isinstance(rep, dict) else rep):
+            jour = _date(i.get("date")) if isinstance(i, dict) else None
+            if not jour or not (debut <= jour <= fin):
+                continue
+            m = {k: v for k, v in {"recharge_ans": i.get("ans_charge"),
+                                   "respiration_nuit": i.get("breathing_rate_avg")}.items() if v is not None}
+            if m:
+                lignes.append({"date": jour, **m})
+        return pd.DataFrame(lignes)
+
     def sommeil(self, jours: list[date], progression: Optional[Callable[[float], None]] = None) -> pd.DataFrame:
         rep = self.get("/v3/users/sleep") or {}
         items = rep.get("nights", []) if isinstance(rep, dict) else rep
@@ -157,6 +170,8 @@ def normaliser_exercice(e: dict) -> Optional[dict]:
         "nom": "Course", "distance_km": round(float(e.get("distance") or 0) / 1000, 3),
         "duree_s": duree_iso(e.get("duration")), "fc_moy": hr.get("average"), "fc_max": hr.get("maximum"),
         "denivele": 0,
+        "extras": {k: v for k, v in {"calories": e.get("calories"),
+                                     "charge": (e.get("training_load") or None)}.items() if v},
         "sport": "course" if "RUN" in sport else ("velo" if ("CYCL" in sport or "BIK" in sport) else "autre"),
     }
 

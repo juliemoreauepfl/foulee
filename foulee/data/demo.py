@@ -55,7 +55,8 @@ def historique(aujourd_hui: date, jours: int = 185, graine: int = 7):
             h = 7 + rng.randint(0, 11)
             acts.append({"id": f"demo-{j.isoformat()}", "date": j, "debut": f"{j.isoformat()}T{h:02d}:{rng.randint(0, 59):02d}:00",
                          "nom": nom, "distance_km": round(km, 2), "duree_s": round(duree), "fc_moy": fcm,
-                         "fc_max": fcx, "denivele": rng.randint(20, 160), "sport": "course"})
+                         "fc_max": fcx, "denivele": rng.randint(20, 160), "sport": "course",
+                         "extras": _extras_course(rng, nom)})
             charge = duree / 60 * (1.6 if nom == "Fractionné" else 1.0)
         fatigue = fatigue * 0.6 + charge / 25
         nuit = base_vfc + nrng.normal(0, 3.2) - fatigue * 1.6 + (k / jours) * 2
@@ -65,6 +66,30 @@ def historique(aujourd_hui: date, jours: int = 185, graine: int = 7):
         som.append({"date": j, "heures": round(heures, 2), "score": int(np.clip(60 + (heures - 6) * 12 + nrng.normal(0, 4), 40, 97)),
                     "fc_repos": int(round(FC_REPOS + fatigue * 1.5 + nrng.normal(0, 1.2)))})
     return pd.DataFrame(acts), pd.DataFrame(vfc), pd.DataFrame(som)
+
+
+def _extras_course(rng, genre) -> dict:
+    """Mesures avancées d'une montre type Forerunner (pas de capteur de puissance ici)."""
+    dur = genre in ("Fractionné", "vma", "seuil", "cotes", "fartlek", "specifique")
+    return {"cadence": rng.randint(168, 176) + (6 if dur else 0),
+            "te_aerobie": round(rng.uniform(3.4, 4.2) if dur else rng.uniform(2.4, 3.2), 1),
+            "te_anaerobie": round(rng.uniform(1.8, 3.1) if dur else rng.uniform(0.0, 0.6), 1),
+            "charge": rng.randint(110, 190) if dur else rng.randint(50, 110),
+            "calories": rng.randint(350, 750)}
+
+
+def quotidien(aujourd_hui: date, jours: int = 60, graine: int = 11) -> pd.DataFrame:
+    rng = random.Random(graine)
+    lignes = []
+    for k in range(jours):
+        j = aujourd_hui - timedelta(days=jours - 1 - k)
+        bb_max = rng.randint(62, 96)
+        lignes.append({"date": j, "pas": rng.randint(6500, 14500), "bb_max": bb_max,
+                       "bb_min": max(5, bb_max - rng.randint(45, 75)), "stress": rng.randint(22, 41),
+                       "fc_repos": rng.randint(46, 52), "intensite": rng.randint(10, 75),
+                       "etages": rng.randint(3, 18), "calories_actives": rng.randint(350, 1100),
+                       "respiration": round(rng.uniform(13.0, 15.5), 1)})
+    return pd.DataFrame(lignes)
 
 
 def simuler_suivi(seances: list[Seance], jusqua: date, graine: int = 3) -> pd.DataFrame:
@@ -85,7 +110,8 @@ def simuler_suivi(seances: list[Seance], jusqua: date, graine: int = 3) -> pd.Da
         heure = "07:15:00" if s.jour == jusqua else "18:30:00"
         lignes.append({"id": f"demo-{s.jour.isoformat()}", "date": s.jour, "debut": f"{s.jour.isoformat()}T{heure}",
                        "nom": s.titre.split("·")[0].strip(), "distance_km": round(km, 2), "duree_s": round(duree),
-                       "fc_moy": fcm, "fc_max": fcm + 18, "denivele": rng.randint(20, 120), "sport": "course"})
+                       "fc_moy": fcm, "fc_max": fcm + 18, "denivele": rng.randint(20, 120), "sport": "course",
+                       "extras": _extras_course(rng, s.genre)})
     return pd.DataFrame(lignes)
 
 

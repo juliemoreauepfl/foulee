@@ -12,6 +12,8 @@ from typing import Any, Callable, Optional
 import pandas as pd
 import requests
 
+from .metriques import garmin_activite, garmin_quotidien
+
 BASE_URL = "https://personal.connectapi.garmin.com"
 JETON = "/personalapitoken-service/personal-api/personal-api-key/token"
 TYPES_VELO = {"cycling", "indoor_cycling", "virtual_ride", "road_biking", "mountain_biking", "gravel_cycling",
@@ -120,6 +122,27 @@ class ClientGarmin:
             d = f + timedelta(days=1)
         return pd.DataFrame(lignes, columns=["date", "nuit", "moy_7j", "zone_basse", "zone_haute", "statut"])
 
+    def quotidien(self, debut: date, fin: date) -> pd.DataFrame:
+        """Résumés quotidiens : pas, Body Battery, stress, FC repos, SpO2… (selon la montre)."""
+        lignes = []
+        d = debut
+        while d <= fin:
+            f = min(d + timedelta(days=30), fin)
+            rep = self.get("/usersummary-service/v2/dailysummaries",
+                           {"startDate": d.isoformat(), "endDate": f.isoformat()})
+            items = rep if isinstance(rep, list) else []
+            if isinstance(rep, dict):
+                items = (rep.get("dailySummaries") or rep.get("summaries") or rep.get("userDailySummaries")
+                         or ([rep] if "calendarDate" in rep else []))
+            for it in items:
+                jour = _date(_get(it, "calendarDate", "date")) if isinstance(it, dict) else None
+                if jour:
+                    m = garmin_quotidien(it)
+                    if m:
+                        lignes.append({"date": jour, **m})
+            d = f + timedelta(days=1)
+        return pd.DataFrame(lignes)
+
     def sommeil(self, jours: list[date], progression: Optional[Callable[[float], None]] = None) -> pd.DataFrame:
         def un_jour(j):
             try:
@@ -213,6 +236,7 @@ def normaliser_activite(a: dict) -> Optional[dict]:
         "fc_moy": _get(a, "averageHR", "averageHeartRate", "summaryDTO.averageHR"),
         "fc_max": _get(a, "maxHR", "maxHeartRate", "summaryDTO.maxHR"),
         "denivele": _get(a, "elevationGain", "summaryDTO.elevationGain", defaut=0),
+        "extras": garmin_activite(a),
         "sport": ("course" if type_cle in TYPES_COURSE or "run" in type_cle
                   else "velo" if type_cle in TYPES_VELO or "cycl" in type_cle or "bik" in type_cle or "ride" in type_cle
                   else "autre"),
