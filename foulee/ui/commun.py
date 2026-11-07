@@ -31,7 +31,7 @@ VELO_SVG = ('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke=
 
 
 def html(h: str):
-    st.markdown(T.compact(h), unsafe_allow_html=True)
+    st.markdown(T.compact(f'<div class="f-bloc">{h}</div>'), unsafe_allow_html=True)
 
 
 def entete(droite: str = ""):

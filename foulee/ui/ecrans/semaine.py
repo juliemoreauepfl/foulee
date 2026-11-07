@@ -147,7 +147,9 @@ def _graphe(ctx, idx, forme):
                     faite += charge_seance(s)
         lignes.append({"prevue": sem.charge, "faite": faite, "phase": sem.phase, "courante": i == idx,
                        "jour_j": any(s.sport == "course_cible" for s in sem.seances)})
-    pic = max(range(len(lignes)), key=lambda i: lignes[i]["prevue"])
+    # Le pic d'entraînement se lit hors semaine de course (la course elle-même pèse lourd)
+    hors_course = [i for i, l in enumerate(lignes) if not l["jour_j"]] or list(range(len(lignes)))
+    pic = max(hors_course, key=lambda i: lignes[i]["prevue"])
     titre = "Ton cycle de 12 semaines" if forme else "Ton plan jusqu'au jour J"
     sous = (f"Charge prévue par semaine. Pic en semaine {pic + 1}, puis affûtage pour arriver frais."
             if not forme else "Charge prévue par semaine : 3 semaines de travail, 1 plus légère.")

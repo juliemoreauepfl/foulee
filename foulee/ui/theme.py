@@ -87,6 +87,14 @@ button[data-testid="stBaseButton-segmented_controlActive"], button[data-testid="
 .f-jours {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; text-align: center; }}
 .f-pastille {{ width: 36px; height: 36px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 600; margin: 4px auto 0; box-sizing: border-box; }}
+/* Streamlit donne une marge négative aux blocs de texte : nos cartes se chevauchaient */
+.stMarkdown, [data-testid="stMarkdown"], [data-testid="stMarkdownContainer"] {{ margin-bottom: 0 !important; }}
+[data-testid="stMarkdownContainer"] > div:last-child, [data-testid="stMarkdownContainer"] > p:last-child {{ margin-bottom: 0 !important; }}
+.f-bloc {{ display: flow-root; padding-bottom: 1px; }}
+/* Sur téléphone, Streamlit empile les colonnes : on garde nos boutons côte à côte */
+[data-testid="stHorizontalBlock"] {{ flex-wrap: nowrap !important; gap: 8px !important; }}
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"], [data-testid="stHorizontalBlock"] > [data-testid="column"] {{
+  min-width: 0 !important; width: auto !important; flex: 1 1 0 !important; }}
 @media (max-width: 380px) {{ .block-container {{ padding: .6rem .7rem 3rem !important; }} }}
 </style>
 """
