@@ -1,0 +1,11 @@
+# Secrets et données personnelles : ne jamais publier
+.streamlit/secrets.toml
+donnees/
+*.fit
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
