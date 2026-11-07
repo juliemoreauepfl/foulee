@@ -259,5 +259,33 @@ def test_sortie_fc(app):
     passer(page="sortie", sortie_act=act, sortie_seance=s.ident)
     t = textes(st)
     assert "Ton cœur pendant la sortie" in t and "Z2 Endurance" in t
+    assert str(act["id"]) in st.session_state.etat["cardio"]   # analyse gardée pour le coach
+
+
+def test_historique_et_analyse_groupee(app):
+    st, passer = app
+    _demarrer(passer)
     passer(page="forme")
+    t = textes(st)
+    assert "Mes sorties" in t
+    boutons = [a[1] for k, a in st.journal if k == "button" and a[1] and a[1].startswith("carte_sortie_")]
+    assert len(boutons) == 8
+    passer(["petit_analyser_tout"])
+    assert len(st.session_state.etat["cardio"]) >= 8
+    passer(page="forme")
+    passer([boutons[0]])
+    assert st.session_state.page == "sortie" and "Ton cœur pendant la sortie" in textes(st)
+    passer(["lien_retour_sortie"])
     assert st.session_state.page == "forme"
+
+
+def test_apercu_seance(app):
+    st, passer = app
+    _demarrer(passer)
+    passer(page="semaine", decal_semaine=1)
+    boutons = [a[1] for k, a in st.journal if k == "button" and a[1] and a[1].startswith("petit_apercu_")]
+    assert boutons
+    passer([boutons[0]])
+    assert st.session_state.page == "apercu"
+    t = textes(st)
+    assert "Aperçu de ta séance" in t and "FC cible" in t and "Pourquoi cette séance" in t

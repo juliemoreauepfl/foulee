@@ -73,12 +73,19 @@ def tag_seance(s: Seance) -> str:
     return T.tag(nom, fond, coul)
 
 
-def carte_seance(s: Seance, entete_txt: str = "Séance du jour", fait: dict | None = None):
+COEUR = ('<svg width="15" height="15" viewBox="0 0 24 24" fill="#E5484D" aria-hidden="true" style="vertical-align:-2px">'
+         '<path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.5h2c.7-1.3 2.2-2.5 4.3-2.5 3.7 0 5.8 3.9 '
+         '4.3 7.3C19.5 16.4 12 21 12 21z"/></svg>')
+
+
+def carte_seance(s: Seance, entete_txt: str = "Séance du jour", fait: dict | None = None, fc: str = ""):
     lignes = "".join(f"<li><span>{T.esc(a)}</span><span>{T.esc(b)}</span></li>" for a, b in S.resume_etapes(s))
     meta = (f"{fmt_duree(s.minutes * 60, court=True)}" if s.sport == "velo"
             else f"{fmt_duree(s.minutes * 60, court=True)} · ~{fmt_km(s.km)}")
     note = f'<p class="f-sous" style="margin:10px 0 0;line-height:1.4">{T.esc(s.note)}</p>' if s.note else ""
     allegee = T.tag("Allégée par le coach", T.BLEU_CLAIR, T.BLEU) if s.allegee else ""
+    fc_html = (f'<div style="margin-top:10px;background:#FFF0F0;border-radius:14px;padding:8px 11px;font-size:13px;'
+               f'line-height:1.35;color:#8A1C22">{COEUR} <b>FC cible</b> · {T.esc(fc)}</div>') if fc else ""
     fait_html = ""
     if fait:
         fait_html = (f'<div style="margin-top:10px">{T.tag("Fait", T.VERT_FOND, T.VERT_TEXTE)} '
@@ -87,7 +94,7 @@ def carte_seance(s: Seance, entete_txt: str = "Séance du jour", fait: dict | No
       <div class="f-ligne"><span>{tag_seance(s)} {allegee}</span><span class="f-sous">{meta}</span></div>
       <div class="f-titre" style="font-size:25px;margin-top:10px">{T.esc(s.titre.split("·", 1)[-1].strip() if "·" in s.titre else s.titre)}</div>
       <div class="f-sous" style="margin-top:2px">{T.esc(entete_txt)}</div>
-      <ol class="f-etapes">{lignes}</ol>{note}{fait_html}</div>''')
+      <ol class="f-etapes">{lignes}</ol>{fc_html}{note}{fait_html}</div>''')
 
 
 def tuiles(valeurs: list[tuple[str, str, str]]):

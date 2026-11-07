@@ -162,3 +162,16 @@ Aujourd'hui → « Annuler cette séance » → choisis une raison (facultatif).
 ## Ta FC pendant les sorties
 
 L'app télécharge le fichier de chaque sortie (Garmin ou Polar), lit ta FC point par point et l'analyse : temps dans chaque zone (Karvonen, à partir de ta FC max et de ta FC repos), dérive cardiaque sur les sorties régulières, footing trop rapide. L'analyse apparaît dans « Comment c'était ? », sous « Voir ma FC pendant la sortie » (Semaine) et dans Forme → « Analyser ma FC sur une sortie ». Le coach en tient compte.
+
+## Ta FC ajuste le plan
+
+Forme → « Mes sorties » : touche n'importe quelle sortie passée pour voir ta FC analysée (« Analyser N sorties » le fait d'un coup). Chaque analyse est gardée, et le coach s'en sert :
+- 2 de tes 4 derniers footings trop hauts en FC → allures un peu plus lentes ;
+- dérive cardiaque sur 2 sorties longues de suite → la suivante raccourcie de 10 % ;
+- FC anormalement haute pour ta vitesse sur la dernière sortie facile → la prochaine séance dure devient un footing ;
+- à effort facile, tu vas plus loin par battement qu'il y a un mois → allures un peu plus rapides.
+Chaque séance affiche aussi ta FC cible.
+
+## Aperçu des prochaines séances
+
+Semaine → « Aperçu » sous une séance à venir : étapes, allures, FC cible, pourquoi cette séance, fichier pour la montre.

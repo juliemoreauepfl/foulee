@@ -38,6 +38,9 @@ h1, h2, h3, .f-titre {{ font-family: 'Bricolage Grotesque', sans-serif !importan
 [class*="st-key-accent"] button {{ background: var(--accent) !important; color: {ENCRE} !important; border: none !important;
   font-family: 'Bricolage Grotesque', sans-serif !important; font-size: 19px !important; font-weight: 800 !important; min-height: 56px; }}
 [class*="st-key-petit"] button {{ min-height: 40px; font-size: 13px; padding: 0 12px; }}
+[class*="st-key-carte"] button {{ background: {BLANC}; border: none; border-radius: 20px; min-height: 52px;
+  justify-content: flex-start; text-align: left; font-weight: 500; font-size: 14px; padding: 8px 16px; }}
+[class*="st-key-carte"] button p {{ text-align: left; }}
 [class*="st-key-lien"] button {{ border: none; min-height: 40px; color: {BLEU}; justify-content: flex-start; padding-left: 0; text-decoration: underline; }}
 
 /* Contrôles segmentés et pastilles */

@@ -59,30 +59,50 @@ def afficher():
 
     _ma_montre(ctx)
 
+    _historique(ctx)
+
+
+def _historique(ctx):
+    """Toutes tes sorties passées : touche-en une pour voir ta FC analysée."""
+    import streamlit as st
     acts = ctx.activites
-    if acts is not None and not acts.empty:
-        lignes = []
-        for r in acts.sort_values("debut").tail(6).iloc[::-1].itertuples():
-            if getattr(r, "sport", "course") == "velo":
-                vitesse = f"{r.distance_km / (r.duree_s / 3600):.0f} km/h" if r.duree_s else "–"
-                droite = f"{fmt_duree(r.duree_s, court=True)} · {vitesse}"
-            else:
-                allure = r.duree_s / r.distance_km if r.distance_km else None
-                droite = f"{fmt_km(r.distance_km)} · {fmt_allure(allure)}"
-            ex = extras_html(getattr(r, "extras", None))
-            lignes.append(f'<li style="flex-direction:column;gap:0"><div class="f-ligne"><span>{fmt_date(r.date)} · {T.esc(r.nom)}</span>'
-                          f'<span style="font-weight:600">{droite}</span></div>{ex}</li>')
-        html(f'<div class="f-carte"><h2 class="f-titre" style="font-size:20px">Dernières sorties</h2>'
-             f'<ol class="f-etapes" style="gap:12px">{"".join(lignes)}</ol></div>')
-        import streamlit as st
-        recents = acts.sort_values("debut").tail(10).iloc[::-1].to_dict("records")
-        noms = {f"{fmt_date(r['date'])} · {r['nom']} · {fmt_km(r['distance_km'])}": r for r in recents}
-        choix = st.selectbox("Analyser ma FC sur une sortie", list(noms), index=None, placeholder="Choisis une sortie")
-        if choix:
-            r = noms[choix]
-            seance = next((s for s in ctx.plan.seances() if ctx.liens.get(s.ident) is not None
-                           and str(ctx.liens[s.ident]["id"]) == str(r["id"])), None)
-            E.aller("sortie", sortie_act=r, sortie_seance=seance.ident if seance else None)
+    if acts is None or acts.empty:
+        return
+    e = E.etat()
+    cardio = e.get("cardio") or {}
+    toutes = acts[acts["date"] <= ctx.aujourd_hui].sort_values("debut", ascending=False).to_dict("records")
+    n = st.session_state.get("histo_n", 8)
+    analysees = sum(1 for a in toutes if str(a["id"]) in cardio)
+    html(f'<div class="f-ligne" style="margin-top:6px"><h2 class="f-titre" style="font-size:20px">Mes sorties</h2>'
+         f'<span class="f-sous">{analysees}/{len(toutes)} analysées</span></div>'
+         '<p class="f-sous" style="margin:2px 0 0">Touche une sortie pour voir ta FC tout du long.</p>')
+    par_id = {str(a["id"]): s for s in ctx.plan.seances() if (a := ctx.liens.get(s.ident)) is not None}
+    for r in toutes[:n]:
+        if r.get("sport") == "velo":
+            droite = f"{fmt_duree(r['duree_s'], court=True)} · vélo"
+        else:
+            droite = f"{fmt_km(r['distance_km'])} · {fmt_allure(r['duree_s'] / r['distance_km']) if r['distance_km'] else '–'}"
+        c = cardio.get(str(r["id"]))
+        marque = ""
+        if c:
+            alerte = any(t == "attention" for t, _ in c.get("messages", []))
+            marque = " · ⚠ FC" if alerte else " · ♥ ok"
+        if st.button(f"{fmt_date(r['date'])} · {r['nom']}  —  {droite}{marque}", key=f"carte_sortie_{str(r['id']).replace('-', '_')}"):
+            s = par_id.get(str(r["id"]))
+            E.aller("sortie", sortie_act=r, sortie_seance=s.ident if s else None, page_avant_sortie="forme")
+    c1, c2 = st.columns(2)
+    with c1:
+        if n < len(toutes) and st.button("Voir plus", key="petit_histo_plus"):
+            st.session_state.histo_n = n + 10
+            st.rerun()
+    with c2:
+        reste = [a for a in toutes[:30] if str(a["id"]) not in cardio]
+        if reste and E.etat().get("mode") != "fichiers" and st.button(f"Analyser {len(reste)} sorties", key="petit_analyser_tout",
+                                                                      icon=":material/monitor_heart:"):
+            from .. import cardio as CAR
+            k = CAR.analyser_tout(reste, ctx.liens, ctx.plan)
+            st.toast(f"{k} sorties analysées. Le coach en tient compte.")
+            st.rerun()
 
 
 def _ma_montre(ctx):

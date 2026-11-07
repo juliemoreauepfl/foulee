@@ -106,7 +106,7 @@ def afficher():
               <div><div class="f-sous" style="font-size:12px">{T.esc(jour_txt(s.jour, auj))}</div>
               <div style="font-weight:600;font-size:15px">{T.esc(s.titre)}</div></div></div><div>{statut}</div></div></div>''')
             if not fait:
-                _deplacer(ctx, sem, s)
+                _apercu_et_deplacer(ctx, sem, s)
             continue
         if fait:
             statut = _chip("Fait", "ok")
@@ -128,11 +128,11 @@ def afficher():
         html(f'''<div class="f-carte" style="padding:10px 16px{bord}"><div class="f-ligne">
           <div><div class="f-sous" style="font-size:12px">{T.esc(jour_txt(s.jour, auj))}{km}</div>
           <div style="font-weight:600;font-size:15px">{T.esc(s.titre)}</div></div><div>{statut}</div></div></div>''')
-        if not fait and s.sport == "course":
-            _deplacer(ctx, sem, s)
+        if not fait and s.sport in ("course", "course_cible"):
+            _apercu_et_deplacer(ctx, sem, s)
         if fait and st.button("Voir ma FC pendant la sortie", key=f"petit_fc_{s.ident.replace('-', '_')}",
                               icon=":material/monitor_heart:"):
-            E.aller("sortie", sortie_act=fait, sortie_seance=s.ident)
+            E.aller("sortie", sortie_act=fait, sortie_seance=s.ident, page_avant_sortie="semaine")
 
     fin = (sem.debut + timedelta(days=7)).isoformat()
     for cle, a in (e.get("annulations") or {}).items():
@@ -154,6 +154,18 @@ def afficher():
     notes = [n for n in e.get("notes", []) if sem.debut.isoformat() <= n["jour"] < (sem.debut + timedelta(days=7)).isoformat()]
     for n in notes[-3:]:
         note_coach(n["texte"])
+
+
+def _apercu_et_deplacer(ctx, sem, s):
+    if s.jour < ctx.aujourd_hui:
+        return
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Aperçu", key=f"petit_apercu_{(s.origine or s.ident).replace('-', '_')}", icon=":material/visibility:"):
+            E.aller("apercu", apercu_seance=s.ident)
+    with c2:
+        if s.sport != "course_cible":
+            _deplacer(ctx, sem, s)
 
 
 def _deplacer(ctx, sem, s):

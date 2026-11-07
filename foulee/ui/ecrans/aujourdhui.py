@@ -66,7 +66,8 @@ def afficher():
     renfos = [s for s in seances if s.sport == "renfo"]
     for s in courses:
         fait = ctx.liens.get(s.ident)
-        carte_seance(s, "Séance du jour" if s.sport != "velo" else "Vélo du jour", fait)
+        from .. import cardio as CAR
+        carte_seance(s, "Séance du jour" if s.sport != "velo" else "Vélo du jour", fait, "" if fait else CAR.cible_txt(s))
         if not fait:
             (boutons_velo if s.sport == "velo" else bouton_fit)(s, s.ident)
             _annuler(ctx, s)

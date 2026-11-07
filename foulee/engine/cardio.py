@@ -39,12 +39,13 @@ class AnalyseFC:
     secondes: list                           # temps passé dans chaque zone
     pct: list                                # en %
     derive: Optional[float] = None           # en %, positif = la FC a monté à vitesse égale
+    efficacite: Optional[float] = None       # mètres par battement au-dessus du repos (plus haut = mieux)
     messages: list = field(default_factory=list)   # (ton, texte) ; ton : ok / attention / info
     points: list = field(default_factory=list)     # (t, fc) pour la courbe
 
     def resume(self) -> dict:
         return {"fc_moy": self.fc_moy, "fc_pic": self.fc_pic, "pct": self.pct,
-                "derive": self.derive, "messages": self.messages}
+                "derive": self.derive, "efficacite": self.efficacite, "messages": self.messages}
 
 
 def _moyenne(xs):
@@ -64,6 +65,38 @@ def derive_cardiaque(flux: list[dict], echauffement_s: int = 600) -> Optional[fl
     return round((ef1 - ef2) / ef1 * 100, 1)
 
 
+def efficacite(flux: list[dict], fc_repos: float, echauffement_s: int = 600) -> Optional[float]:
+    """Distance parcourue par battement au-dessus du repos, échauffement exclu.
+    À intensité facile, elle monte quand l'endurance progresse et baisse avec la fatigue."""
+    pts = [p for p in flux if p.get("fc") and p.get("v") and p["v"] > 0.5 and p["t"] >= echauffement_s]
+    if len(pts) < 30:
+        return None
+    v = _moyenne([p["v"] for p in pts]) * 60
+    fc = _moyenne([p["fc"] for p in pts]) - fc_repos
+    return round(v / fc, 3) if fc > 5 else None
+
+
+CIBLES = {  # genre -> (zone basse, zone haute) en indices 0..4
+    "footing": (1, 1), "long": (1, 1), "velo_endurance": (1, 1), "velo_recup": (0, 0),
+    "seuil": (3, 3), "velo_tempo": (2, 3), "specifique": (2, 3), "fartlek": (2, 3), "rappel": (2, 2),
+    "vma": (4, 4), "cotes": (3, 4),
+}
+
+
+def cible(genre: str, b: list) -> Optional[tuple[int, int, str]]:
+    """FC visée pendant la séance (bas, haut, texte)."""
+    z = CIBLES.get(genre)
+    if not z:
+        return None
+    lo, hi = b[z[0]], b[z[1] + 1]
+    zones = f"Z{z[0] + 1}" if z[0] == z[1] else f"Z{z[0] + 1}-Z{z[1] + 1}"
+    if genre in ("vma", "cotes"):
+        return lo, hi, f"Sur les efforts, au-dessus de {lo} bpm ({zones}). La FC monte en retard : fie-toi d'abord à l'allure."
+    if genre in ("footing", "long", "velo_endurance", "velo_recup"):
+        return lo, hi, f"Reste sous {hi} bpm ({zones}) tout du long, même si l'allure paraît lente."
+    return lo, hi, f"Sur les blocs d'effort : {lo}–{hi} bpm ({zones})."
+
+
 def analyser(flux: list[dict], fc_max: float, fc_repos: float, genre: str = "footing") -> Optional[AnalyseFC]:
     pts = [p for p in flux if p.get("fc") and 30 < p["fc"] < 230]
     if len(pts) < 20:
@@ -78,6 +111,7 @@ def analyser(flux: list[dict], fc_max: float, fc_repos: float, genre: str = "foo
     fc_moy = round(_moyenne([p["fc"] for p in pts]))
     fc_pic = max(p["fc"] for p in pts)
     an = AnalyseFC(fc_moy, fc_pic, b, [round(s) for s in sec], pct)
+    an.efficacite = efficacite(flux, fc_repos)
     pas = max(1, len(pts) // 160)
     an.points = [(p["t"], p["fc"]) for p in pts[::pas]]
     m = an.messages

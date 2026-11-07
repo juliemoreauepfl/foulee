@@ -277,6 +277,74 @@ def regles_du_jour(etat: dict, plan: Plan, meteo: Meteo, aujourd_hui: date, lien
     return messages
 
 
+# ------------------------------------------------------------ règles cardio
+FACILES = {"footing", "long"}
+
+
+def regles_cardio(etat: dict, plan: Plan, aujourd_hui: date) -> list[str]:
+    """Ajuste le plan à partir de la FC mesurée pendant tes sorties (etat["cardio"])."""
+    from statistics import median
+    cardio = [c for c in (etat.get("cardio") or {}).values() if c.get("jour")]
+    cardio.sort(key=lambda c: c["jour"])
+    j = lambda c: date.fromisoformat(c["jour"])
+    faciles = [c for c in cardio if c.get("genre") in FACILES and aujourd_hui - timedelta(days=42) <= j(c) <= aujourd_hui]
+    f = etat.setdefault("facteurs", {"allure": 1.0, "volume": 1.0})
+    aj = etat.setdefault("ajustements", {})
+    sem = aujourd_hui.isocalendar()
+    messages = []
+
+    def dire(cle, txt):
+        _noter(etat, aujourd_hui, txt, cle)
+        messages.append(txt)
+
+    # 1. Footings trop rapides : 2 des 4 derniers avec plus de 30 % du temps au-dessus de l'endurance
+    recents = [c for c in faciles if j(c) >= aujourd_hui - timedelta(days=21)][-4:]
+    vites = [c for c in recents if sum((c.get("pct") or [0] * 5)[2:]) > 30]
+    if len(vites) >= 2 and not _regle_deja(etat, f"cardio-vite-{sem.year}-{sem.week}"):
+        f["allure"] = round(min(1.06, f.get("allure", 1.0) * 1.01), 4)
+        dire(f"cardio-vite-{sem.year}-{sem.week}",
+             f"{len(vites)} de tes {len(recents)} derniers footings sont sortis trop haut en FC. Je ralentis un peu tes allures, "
+             "et chaque séance affiche maintenant ta FC cible : reste dessous.")
+
+    # 2. Dérive cardiaque sur les deux dernières sorties longues → la prochaine ne s'allonge pas
+    longues = [c for c in faciles if c.get("genre") == "long" and c.get("derive") is not None][-2:]
+    if len(longues) == 2 and all(c["derive"] > 5 for c in longues) and not _regle_deja(etat, f"cardio-derive-{sem.year}-{sem.week}"):
+        prochaine = next((s for s in plan.seances() if s.genre == "long" and s.jour > aujourd_hui
+                          and s.jour.isoformat() not in aj), None)
+        if prochaine:
+            aj[prochaine.jour.isoformat()] = {"type": "raccourcir", "facteur": 0.9,
+                                              "note": "Dérive cardiaque sur tes deux dernières sorties longues : on consolide avant d'allonger."}
+            dire(f"cardio-derive-{sem.year}-{sem.week}",
+                 "Ta FC dérive en fin de sortie longue deux fois de suite : la prochaine est raccourcie de 10 % "
+                 "pour consolider. Pense à boire et à partir plus doucement.")
+
+    # 3. Fatigue cardiaque : FC anormalement haute pour la vitesse sur ta dernière sortie facile
+    effs = [c["efficacite"] for c in faciles[:-1] if c.get("efficacite")]
+    dern = faciles[-1] if faciles else None
+    if (dern and dern.get("efficacite") and len(effs) >= 3 and (aujourd_hui - j(dern)).days <= 2
+            and dern["efficacite"] < median(effs) * 0.93 and not _regle_deja(etat, f"cardio-fatigue-{dern['jour']}")):
+        dure = next((s for s in plan.seances() if s.sport == "course" and s.genre in QUALITE
+                     and aujourd_hui <= s.jour <= aujourd_hui + timedelta(days=3) and s.jour.isoformat() not in aj), None)
+        txt = (f"Sur ta dernière sortie facile, ta FC était haute pour ta vitesse (efficacité {100 * (1 - dern['efficacite'] / median(effs)):.0f} % "
+               "sous ton habitude) : signe de fatigue, de chaleur ou d'un virus qui traîne.")
+        if dure:
+            aj[dure.jour.isoformat()] = {"type": "footing", "minutes": 35,
+                                         "note": "Cœur fatigué sur la dernière sortie : footing tranquille au lieu de la séance."}
+            txt += f" {dure.titre.split('·')[0].strip()} remplacé par un footing tranquille."
+        dire(f"cardio-fatigue-{dern['jour']}", txt)
+
+    # 4. Progrès : à intensité facile, tu vas plus loin par battement qu'il y a un mois
+    avant = [c["efficacite"] for c in faciles if c.get("efficacite") and j(c) < aujourd_hui - timedelta(days=14)]
+    apres = [c["efficacite"] for c in faciles if c.get("efficacite") and j(c) >= aujourd_hui - timedelta(days=14)]
+    cle = f"cardio-progres-{sem.year}-{sem.week // 4}"
+    if len(avant) >= 3 and len(apres) >= 3 and median(apres) >= median(avant) * 1.05 and not _regle_deja(etat, cle):
+        gain = 100 * (median(apres) / median(avant) - 1)
+        f["allure"] = round(max(0.95, f.get("allure", 1.0) * 0.99), 4)
+        dire(cle, f"Ton cœur progresse : à effort facile, tu vas {gain:.0f} % plus loin par battement qu'il y a un mois. "
+                  "Tes allures accélèrent d'environ 1 %.")
+    return messages
+
+
 # ------------------------------------------------------------ conformité aux allures
 def conformite(seance: Seance, tours: list[dict]) -> list[dict]:
     """Compare chaque bloc d'effort prévu aux tours de la montre."""

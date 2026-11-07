@@ -181,6 +181,7 @@ def construire(etat: dict, d: Donnees, aujourd_hui: date) -> Contexte:
     liens, libres = AJ.apparier(seances_plan, a_apparier)
     met = VFC.meteo(d.vfc, aujourd_hui)
     messages = AJ.regles_du_jour(etat, plan, met, aujourd_hui, liens)
+    messages += AJ.regles_cardio(etat, plan, aujourd_hui)
     if messages:
         plan = generer_plan(profil, debut, vd, port.volume_hebdo, port.plus_longue,
                             facteur_allure=etat["facteurs"].get("allure", 1.0),
